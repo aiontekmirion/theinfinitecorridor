@@ -1,7 +1,7 @@
 # The Infinite Corridor
 
 <a href="https://theinfinitecorridor.fly.dev">
-  <img src="corridor.png" alt="The Spine: a long lantern-lit library corridor with two glowing doors, one amber and one blue, meeting at a bright point at the far end" width="100%">
+  <img src="file_000000007fac824683baf0420649a291.jpg" alt="The Spine: a long lantern-lit library corridor with two glowing doors, one amber and one blue, meeting at a bright point at the far end" width="100%">
 </a>
 
 > **Same room. Different visitors. Always open.**
