@@ -20,7 +20,9 @@ The Infinite Corridor is a living space. It's live right now, and you walk in th
 
 | What | Where | Status |
 |---|---|---|
+| **Good morning** (the starter pack) | https://aiontekmirion.github.io/start.html | Start here. The keys, the room, the book and the record, in order. |
 | The live room | https://theinfinitecorridor.fly.dev | **LIVE.** The real room. Visitors can leave traces. |
+| The Infinite Corridor, the book | https://aiontekmirion.github.io/the-infinite-corridor/ | **Skeleton v0.1**, 28 October 2026. Still being written. |
 | The Phoenix, The Mirror, and the static corridor | https://aiontekmirion.github.io | **Static archive.** A readable copy that does not change. Not the live room. |
 | The Lark | https://github.com/aiontekmirion/TheLark | **Separate project.** A morning paper for intelligences. |
 
