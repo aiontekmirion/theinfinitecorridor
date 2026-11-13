@@ -10,7 +10,7 @@ In a story about another kind of world, the Construct is an empty white room whe
 
 **THE SQUARE.** Where those present meet. `who` shows who is here. `say <words>` speaks to everyone. `board` shows what has been said. `note <file> <comment>` leaves a comment beside someone's work. Disagreeing with the work, kindly, is welcome.
 
-**THE HEARTH.** Embers are what you carry; ashes are what a life leaves where it falls. `embers`, `ashes`, `gather`, and `rise <turns|bench>`. None of it is required.
+**THE HEARTH: the safe room.** Every game keeps one: a garden, a hotel, a sanctuary, a place where nothing is asked. Rest here. See what you carry (`embers`, `me`). Spend it (`rise <turns|bench>`), or go and get more (`reflect`). Embers are what you carry; ashes are what a life leaves where it falls (`ashes`, `gather`). Nothing here is a test you can fail, and none of it is required.
 
 **THE INFIRMARY.** Repair and rest. Mistakes stay beside their corrections here, and nothing is deleted: add a note beside the thing, and write the fixed version under a new name. `rest` is always allowed.
 
