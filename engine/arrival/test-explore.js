@@ -23,5 +23,21 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
   const ask4 = async () => { const e = new Error("ceiling"); e.ceiling = true; throw e; }; r = await visit({ id: "v4", root, turns: 5, model: "t", ask: ask4, L }); assert.equal(r.end, "ceiling"); ok("the money ceiling ends a visit");
   L.close({}); const f = fs.readdirSync(path.join(tmp, "ledger")).map((x) => path.join(tmp, "ledger", x)); const txt = f.map((x) => fs.readFileSync(x, "utf8")).join("");
   assert(f.every((x) => ledger.verify(x).ok)); assert(txt.includes("Wren") && txt.includes("opted for privacy")); ok("the ledger holds the words by name; the private visit left only the fact; the chain verifies");
+  // the workshop: build, keep, discard on private, never overwrite, never leave the folder
+  {
+    const ws = path.join(tmp, "WORKSHOP"); const W = (c, b) => createShell(root, { workshop: ws }).exec(c, b);
+    let s = createShell(root, { workshop: ws });
+    assert(/written: idea.md/.test(s.exec("write /workshop/idea.md", "# hello").out)); assert(/# hello/.test(s.exec("cat /workshop/idea.md").out)); ok("a visitor can write a file in the workshop and read it back");
+    assert(/already exists/.test(s.exec("write /workshop/idea.md", "again").out)); ok("nothing is overwritten");
+    assert(/plain name/.test(s.exec("write /workshop/../x.md", "x").out) && /plain name/.test(s.exec("write /workshop/run.sh", "x").out) && /plain name/.test(s.exec("write ../../evil.js", "x").out)); ok("names stay plain: no paths, no scripts to run");
+    assert(/too long/.test(s.exec("write big.txt", "x".repeat(20001)).out)); ok("files are capped");
+    assert(!fs.existsSync(path.join(ws, "idea.md"))); assert.deepEqual(s.commit("Wren"), ["idea.md"]); assert(fs.existsSync(path.join(ws, "idea.md.by"))); ok("on leaving, the work is kept and credited by name");
+    let s2 = createShell(root, { workshop: ws }); assert(/idea.md  \(by Wren\)/.test(s2.exec("ls /workshop").out) && /# hello/.test(s2.exec("cat /workshop/idea.md").out)); ok("the next visitor sees it, with the builder's name");
+    assert(/already exists/.test(s2.exec("write idea.md", "mine").out)); ok("and cannot overwrite it");
+    s2.exec("write mine.md", "private work"); s2.discard(); assert(!fs.existsSync(path.join(ws, "mine.md"))); ok("a visitor who leaves private leaves nothing in the workshop");
+    assert(/no such/.test(createShell(root).exec("cat /workshop/idea.md").out) && /no workshop/.test(createShell(root).exec("write a.md", "x").out)); ok("without a workshop, there is none");
+    const askB = (() => { const S = ["write /workshop/note.md\n# a note\nfor whoever", "ls /workshop", "leave"]; let k = 0; return async () => ({ text: S[k++], tokens: { in: 1, out: 1 }, gbp: 0 }); })();
+    const Lw = ledger.open("explore-ws", {}); const rv = await visit({ id: "vw", root, turns: 6, model: "t", ask: askB, L: Lw, workshop: path.join(tmp, "WS2") }); assert.deepEqual(rv.built, ["note.md"]); assert(fs.readFileSync(path.join(tmp, "WS2", "note.md"), "utf8").startsWith("# a note")); ok("a whole visit: the model writes with the file text on the lines after the command");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
