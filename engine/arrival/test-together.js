@@ -30,5 +30,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert.equal(by["builder-3"].end, "rested"); ok("three rests in a row end a visit gently");
   const w = createWorld({ workshop: ws }); w.join("a"); w.join("b"); w.event("a", "wrote", "/workshop/x.md"); assert.deepEqual(w.unseen("b"), ["a wrote /workshop/x.md"]); assert.deepEqual(w.unseen("b"), []); ok("each builder is told about each thing once");
   L.close({}); const f = fs.readdirSync(path.join(tmp, "ledger")).map((x) => path.join(tmp, "ledger", x)); assert(f.every((x) => ledger.verify(x).ok)); ok("the ledger chain verifies");
+  // the model each builder runs on is the model it is CALLED with, and the model its record says
+  {
+    const wsM = path.join(tmp, "WS-MODELS"), Lm = ledger.open("together-models", {}); const asked = {};
+    const askM = async (a) => { const id = a.label.split(" ")[0]; asked[id] = asked[id] || new Set(); asked[id].add(a.model); return { text: "leave", tokens: { in: 1, out: 1 }, gbp: 0 }; };
+    const dm = await runDay({ root, workshop: wsM, L: Lm, ask: askM, model: "default-model", models: ["model-a", "model-b", "model-c"], notice: togetherNotice(), turns: 3, web: false, parallel: 4, stagger: 0, startIndex: 0 });
+    assert.deepEqual([...asked["builder-1"]], ["model-a"]); assert.deepEqual([...asked["builder-2"]], ["model-b"]); assert.deepEqual([...asked["builder-3"]], ["model-c"]); assert.deepEqual([...asked["builder-4"]], ["model-a"]); ok("a mixed village: each builder is actually called on its own model, in turn");
+    assert.deepEqual(dm.results.map((r) => r.model), ["model-a", "model-b", "model-c", "model-a"]); ok("and its record names the model it really ran on, not a label");
+    const ds = await runDay({ root, workshop: wsM, L: Lm, ask: askM, model: "solo", notice: togetherNotice(), turns: 3, web: false, parallel: 2, stagger: 0, startIndex: 10 }); assert(ds.results.every((r) => r.model === "solo")); assert(asked["builder-11"].has("solo") && asked["builder-11"].size === 1); ok("with one model chosen, every call goes to it (the bug where --model changed only the label is gone)");
+  }
   console.log("\ntogether: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

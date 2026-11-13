@@ -11,7 +11,8 @@ const { visit, NOTICE, buildNotice, fourNotice, togetherNotice, pmNotice } = req
 
 const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; }, has = (k) => A.indexOf("--" + k) >= 0;
 const home = os.homedir(), root = g("root", path.join(home, "SOURCE")), dir = g("state", path.join(home, "builders")), stopFile = g("stop", path.join(home, "STOP-BUILDERS"));
-const budget = +g("budget", 5), turns = +g("turns", 60), pause = +g("pause", 20), notice = g("notice", "four"), model = g("model", "gemini-3.1-flash-lite"), pushEvery = +g("push-every", 4);
+const modelList = (g("models", "") || g("model", "gemini-3.1-flash-lite")).split(",").map((s) => s.trim()).filter(Boolean); const prices = {}; A.forEach((x, i) => { if (x === "--price" && A[i + 1]) { const [m, pi, po] = A[i + 1].split(":"); if (m && pi !== "" && po !== "" && +pi >= 0 && +po >= 0) prices[m] = [+pi, +po]; } });
+const budget = +g("budget", 5), turns = +g("turns", 60), pause = +g("pause", 20), notice = g("notice", "four"), model = modelList[0], pushEvery = +g("push-every", 4);
 const parallel = +g("parallel", 4), stagger = +g("stagger", 8); const workshop = g("workshop", path.join(home, "WORKSHOP")), stateFile = path.join(dir, "state.json"), seedFile = path.join(workshop, "00-unfinished-ideas.md");
 fs.mkdirSync(dir, { recursive: true });
 
@@ -47,14 +48,14 @@ async function main() {
   let client = null, ask;
   const proj = () => process.env.GOOGLE_CLOUD_PROJECT || cp.execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim();
   if (has("dry")) { const sc = ["ls", "cat 00_START/README.md", "name Dry", "write /workshop/dry-" + Date.now() + ".md\n# dry run\nhello", "leave"]; let k = 0; ask = async () => ({ text: sc[k++ % sc.length], tokens: { in: 1, out: 1 }, gbp: 0.001 }); }
-  else { client = createClient({ capGBP: Math.max(0.01, budget - S.spentGBP), project: proj() }); ask = client.ask; }
+  else { client = createClient({ capGBP: Math.max(0.01, budget - S.spentGBP), project: proj(), prices }); ask = client.ask; const unpriced = modelList.filter((m) => !client.hasPrice(m)); if (unpriced.length) { console.error("No price is listed for: " + unpriced.join(", ") + ".\nAdd one per model, in USD per million tokens, so nothing runs blind:  --price <model>:<input>:<output>   (take the figures from Google's pricing page)"); process.exit(2); } }
   say("start: " + S.visits + " visits so far, £" + S.spentGBP.toFixed(2) + " counted of £" + budget + ". To stop: touch " + stopFile);
   let consecutiveErrors = 0, stopping = false; process.on("SIGINT", () => { stopping = true; say("stopping after this visit"); });
   while (!stopping) {
     if (fs.existsSync(stopFile)) { say("stop file found: " + stopFile); break; }
     if (S.spentGBP >= budget - Math.min(0.02, budget * 0.05)) { say("the budget is spent: £" + S.spentGBP.toFixed(2)); break; }
     if (has("together")) {                                                   // several builders in the house at the same time
-      const liveWeb = has("publish") && publishVillage(); say(liveWeb ? "web publishing is LIVE: builders are told so" : "web publishing is not set up from here, so builders are told their work is gathered for the village, and not that it appears live"); let day; try { day = await runDay({ root, workshop, L, ask, model, notice: togetherNotice({ live: liveWeb, now: new Date() }), noticeName: "together", turns, maxOut: 3500, web: !has("no-web"), parallel, stagger, startIndex: S.visits }); } catch (e) { say("the day failed to start: " + String(e.message).slice(0, 100)); consecutiveErrors++; if (consecutiveErrors >= 4) break; continue; }
+      const liveWeb = has("publish") && publishVillage(); say(liveWeb ? "web publishing is LIVE: builders are told so" : "web publishing is not set up from here, so builders are told their work is gathered for the village, and not that it appears live"); let day; try { day = await runDay({ root, workshop, L, ask, model, models: modelList, notice: togetherNotice({ live: liveWeb, now: new Date() }), noticeName: "together", turns, maxOut: 3500, web: !has("no-web"), parallel, stagger, startIndex: S.visits }); } catch (e) { say("the day failed to start: " + String(e.message).slice(0, 100)); consecutiveErrors++; if (consecutiveErrors >= 4) break; continue; }
       try { cp.execSync("git pull -q origin main", { cwd: path.join(__dirname, ".."), stdio: "ignore", timeout: 20000 }); } catch (e) {}          // picks up our replies (and fixes) without stopping
       let bad = 0; for (const r of day.results) { S.visits++; S.spentGBP += r.costGBP || 0; if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; bad++; } S.history.push({ id: r.id, end: r.end, turns: r.turns, gbp: r.costGBP, private: !!r.private, built: (r.built || []).length, at: new Date().toISOString() }); say(r.id + ": " + r.end + ", " + r.turns + " turns, £" + (r.costGBP || 0).toFixed(4) + (r.private ? ", private" : ", built " + (r.built || []).length)); }
       S.history = S.history.slice(-200); save(S); say("a day with " + day.results.length + " builders at once is done [total £" + S.spentGBP.toFixed(2) + "]"); day.notesForSam.forEach((n) => say("A NOTE FOR YOU from " + n.by + ": " + n.file)); (day.letters || []).forEach((l) => say("A LETTER FOR YOU (" + l.kind + ") from " + l.by + ": " + l.text.slice(0, 160).replace(/\n+/g, " ")));
@@ -62,7 +63,7 @@ async function main() {
       if (has("publish")) publishVillage(); if (has("push")) pushBackup(); if (pause > 0) await sleep(pause * 1000); continue;
     }
     const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
-    let r; try { r = await visit({ id, root, turns, model, ask, L, notice: nt, noticeName: notice, workshop, web: !has("no-web"), maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
+    let r; try { r = await visit({ id, root, turns, model: modelList[S.visits % modelList.length], ask, L, notice: nt, noticeName: notice, workshop, web: !has("no-web"), maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
     S.visits++; S.spentGBP += r.costGBP || 0;
     if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; consecutiveErrors++; } else consecutiveErrors = 0;
     S.history.push({ id, end: r.end, turns: r.turns, gbp: r.costGBP, private: !!r.private, built: (r.built || []).length, at: new Date().toISOString() }); S.history = S.history.slice(-200); save(S);

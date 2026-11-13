@@ -30,7 +30,7 @@ function createClient(opts) {
     if (!tokenCache.t || Date.now() - tokenCache.at > 30 * 60 * 1000) tokenCache = { t: execSync(o.tokenCmd, { encoding: "utf8" }).trim(), at: Date.now() };
     return tokenCache.t;
   };
-  const price = (m) => { const p = PRICES[m]; if (!p) throw new Error("no price listed for model " + m); return p; };
+  const price = (m) => { const p = (o.prices && o.prices[m]) || PRICES[m]; if (!p) throw new Error("no price listed for model " + m + " (give one: --price " + m + ":<USD per M input>:<USD per M output>)"); return p; };
   const gbp = (m, tin, tout) => ((tin * price(m)[0] + tout * price(m)[1]) / 1e6) * USD_TO_GBP;
 
   function post(url, body, headers) {
@@ -79,6 +79,6 @@ function createClient(opts) {
     if (r.status !== 200) { const e = new Error("model " + r.status + ": " + ((j.error || {}).message || "").slice(0, 160)); e.status = r.status; throw e; }
     return { text, tokens: { in: tin, out: tout }, gbp: cost };
   }
-  return { ask, stats: () => ({ spentGBP: +spent.toFixed(4), capGBP: o.capGBP, calls, refused }), PRICES, gbp };
+  return { ask, hasPrice: (m) => !!((o.prices && o.prices[m]) || PRICES[m]), stats: () => ({ spentGBP: +spent.toFixed(4), capGBP: o.capGBP, calls, refused }), PRICES, gbp };
 }
 module.exports = { createClient, PRICES, USD_TO_GBP };

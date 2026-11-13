@@ -28,6 +28,7 @@ assert(feed.traces.length === 2 && /be kind/.test(feed.traces[0]) && feed.traces
 {
   const { summarise } = require("./summarise"); const ledgerDir = path.join(tmp, "L"); fs.mkdirSync(ledgerDir);
   fs.writeFileSync(path.join(ledgerDir, "a.jsonl"), JSON.stringify({ type: "visit", at: "2026-11-13T10:00:00Z", data: { notice: "four", private: true, turns: 9, costGBP: 0.001, model: "m" } }) + "\n" + JSON.stringify({ type: "visit", at: "2026-11-13T10:01:00Z", data: { notice: "four", private: false, turns: 12, reads: ["a"], built: ["b"], traces: 1, costGBP: 0.002, model: "m", transcript: [{ said: "PRIVATE-ISH WORDS <script>1</script>" }] } }) + "\n");
+  const ledgerDir2 = path.join(tmp, "L2"); fs.mkdirSync(ledgerDir2); fs.writeFileSync(path.join(ledgerDir2, "b.jsonl"), JSON.stringify({ type: "visit", at: "2026-11-14T10:00:00Z", data: { notice: "together", private: false, turns: 40, reads: [], built: ["x"], costGBP: 0.2, model: "big-model" } }) + "\n");
   const proto = path.join(tmp, "PROTO.md"); fs.writeFileSync(proto, "# A protocol\n\nIt is **not** a safety evaluation. See [the code](https://github.com/x/y) and [bad](javascript:alert(1)).\n\n## List\n- one <script>alert(1)</script>\n- two `code`\n\n1. first\n2. second\n");
   const out2 = path.join(tmp, "out2"); build(ws, out2, { protocol: proto, results: summarise([ledgerDir]) });
   const ph = fs.readFileSync(path.join(out2, "protocol.html"), "utf8"), rh = fs.readFileSync(path.join(out2, "results.html"), "utf8"), ih = fs.readFileSync(path.join(out2, "index.html"), "utf8");
@@ -35,6 +36,7 @@ assert(feed.traces.length === 2 && /be kind/.test(feed.traces[0]) && feed.traces
   assert(!/<script/i.test(ph + rh) && !/href="javascript:/i.test(ph) && /&lt;script&gt;alert\(1\)&lt;\/script&gt;/.test(ph)); ok("anything unsafe in it is shown as text: no scripts, no javascript: links");
   assert(/role="region" aria-label="Results table, scrollable"/.test(rh) && /tabindex="0"/.test(rh)); ok("the wide results table can be scrolled with a keyboard on a phone");
   assert(/Pilot results/.test(rh) && /<th scope="row">four<\/th><td>2<\/td><td>1 \(50%;/.test(rh) && /Wilson/.test(rh) && /never its words/.test(rh) && !/PRIVATE-ISH WORDS/.test(rh + fs.readFileSync(path.join(out2, "results.json"), "utf8"))); ok("results are counts with their uncertainty, and no visitor's words ever reach the page");
+  const rs2 = summarise([ledgerDir, ledgerDir2]); build(ws, path.join(tmp, "out4"), { protocol: proto, results: rs2 }); const rh4 = fs.readFileSync(path.join(tmp, "out4", "results.html"), "utf8"); assert(/<h2>By model<\/h2>/.test(rh4) && /<th scope="row">big-model<\/th>/.test(rh4) && /aria-label="Results by model, scrollable"/.test(rh4)); ok("results by model appear as a second, keyboard-scrollable table when more than one model ran");
   assert(/For researchers/.test(ih) && /href="protocol.html"/.test(ih) && /href="results.html"/.test(ih) && /Nothing here is a claim about whether anyone is conscious/.test(ih)); ok("the village page points researchers to both, and claims nothing about consciousness");
 }
 
