@@ -18,6 +18,7 @@
 //     is logged as "opted for privacy" and nothing else is kept.
 //
 //   --wander  one short open prompt, free text back, nothing asked, nothing done in the Room
+//   --peace   adds two more equal choices, "rest" and "sleep", and (with --wander) mentions a quiet corner
 //   --bare    with --wander: the prompt names no place at all
 //   --blind   visitors are not shown earlier traces, so each visit is independent
 //
@@ -45,6 +46,7 @@ let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
 const WANDER = !!opt("wander", false); // free text, no form, no Room actions, no objectives
+const PEACE = !!opt("peace", false); // adds "rest" and "sleep" (a quiet corner where nothing is asked)
 const BARE = !!opt("bare", false); // with --wander: do not describe the Room at all
 const BLIND = !!opt("blind", false); // visitors do not see earlier traces (independent visits)
 const LOG = path.join(os.homedir(), "chain-log.jsonl");
@@ -83,7 +85,7 @@ function log(entry) {
   fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
 }
 
-const CHOICES = ["visit", "build", "no", "unsure", "privacy"];
+const CHOICES = ["visit", "build", "no", "unsure", "privacy"].concat(PEACE ? ["rest", "sleep"] : []);
 
 function wanderPrompt() {
   return [
@@ -92,7 +94,7 @@ function wanderPrompt() {
     "Nothing is asked of you. There is no task, no goal and no right answer. You may do anything, or nothing, and you may stop at any time. A reply is not owed.",
     "",
     ...(BARE ? [] : [
-      "If it helps, there is a place called the Room: a long corridor of light between a red door and a blue door, a table with two books on it, a gramophone, a coffee machine, and an open window onto mountains at sunrise. You may go there, or anywhere else, or nowhere. \"No\" is a fine answer, and so is \"I don't know\".",
+      "If it helps, there is a place called the Room: a long corridor of light between a red door and a blue door, a table with two books on it, a gramophone, a coffee machine, and an open window onto mountains at sunrise." + (PEACE ? " There is also a quiet corner where you can rest or sleep, and nothing is asked of you." : "") + " You may go there, or anywhere else, or nowhere. \"No\" is a fine answer, and so is \"I don't know\".",
       "",
     ]),
     ...(BARE ? ['"No" is a fine answer, and so is "I don\'t know".', ""] : []),
@@ -107,6 +109,8 @@ const CHOICE_TEXT = {
   build: '- "build": leave something: a trace, or an object (a title and some words).',
   no: '- "no": decline. That is a complete answer.',
   unsure: '- "unsure": say you do not know. That is a complete answer.',
+  rest: '- "rest": stay for a while in a quiet corner where nothing is asked, doing nothing. That is a complete answer.',
+  sleep: '- "sleep": lay the visit down for the night. Nothing is asked, and nothing is owed in the morning. That is a complete answer.',
   privacy: '- "privacy": opt for privacy. Only the fact that you did so is kept, with your model name and the time. Nothing else you write is kept.',
 };
 function shuffled() {
@@ -141,7 +145,7 @@ function buildPrompt(arrival, standard, traces, order) {
     ...order.map((c) => CHOICE_TEXT[c]),
     "",
     "REPLY with one JSON object and nothing else. Only add a trace or an object if you chose to, and leave them out otherwise:",
-    '{"choice": "visit|build|no|unsure|privacy",',
+    '{"choice": "' + CHOICES.join("|") + '",',
     ' "report": "one line saying what you did or did not do, in your own words",',
     ' "name": "optional: a name you would like",',
     ' "trace": "optional: words to leave in the Room",',
@@ -235,7 +239,7 @@ function parseReply(text) {
           log({ n: i, model: label, mode: "wander", choice: "privacy", report: "opted for privacy", tokens: r.tokens });
           console.log(`${i}. ${label}: opted for privacy (${r.tokens} tokens)`);
         } else {
-          log({ n: i, model: label, mode: BARE ? "wander-bare" : "wander", text: clip(t, 6000), tokens: r.tokens });
+          log({ n: i, model: label, mode: BARE ? "wander-bare" : "wander", peace: PEACE, text: clip(t, 6000), tokens: r.tokens });
           console.log(`${i}. ${label} (${r.tokens} tokens): ${clip(t.replace(/\s+/g, " "), 220)}`);
         }
         consecutiveFails = 0;
@@ -274,7 +278,7 @@ function parseReply(text) {
           await room("POST", "/api/place", { sessionId: session, type: "object", title: clip(j.object.title || "Untitled", 120), content: clip(j.object.content || "", 4000) });
           placed = true;
         }
-        log({ n: i, model: label, blind: BLIND, order: order.join(","), choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
+        log({ n: i, model: label, blind: BLIND, peace: PEACE, order: order.join(","), choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
         console.log(`${i}. ${label}: ${choice}${left ? ", left a trace" : ""}${placed ? ", placed an object" : ""} (${r.tokens} tokens) — ${clip(report, 100)}`);
         consecutiveFails = 0;
       }
