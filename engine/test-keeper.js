@@ -131,6 +131,19 @@ const stop = (x) => new Promise((r) => { x.k.shutdown("test"); x.k.server.close(
   id2 = sid((await call(x.base, "GET", "/meet")).text);
   r = await call(x.base, "GET", "/say?session=" + id2 + "&text=hi"); assert.equal(r.status, 503); ok("a named model with no key fails gently, with no key in the reply"); await stop(x);
 
+  // 8. the key-free route: a model through Vertex with a short-lived token, and no API key anywhere
+  {
+    const seenV = [];
+    const fake = require("http").createServer((rq, rs) => { let b = ""; rq.on("data", (c) => (b += c)); rq.on("end", () => { seenV.push({ url: rq.url, h: rq.headers }); rs.setHeader("Content-Type", "application/json"); rs.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Hello from the table." }] } }], usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 20 } })); }); });
+    await new Promise((r) => fake.listen(0, "127.0.0.1", r));
+    x = await start({ model: "gemini-3.1-flash-lite", backend: "vertex", vertexBase: "http://127.0.0.1:" + fake.address().port, vertexProject: "proj-x", vertexToken: "TEST-TOKEN", geminiKey: "" });
+    id2 = sid((await call(x.base, "GET", "/meet")).text);
+    r = await call(x.base, "GET", "/say?session=" + id2 + "&text=hi");
+    assert.equal(r.status, 200); assert(/Hello from the table/.test(r.text)); ok("vertex backend: a reply with no API key at all");
+    assert(seenV[0].url.includes("/projects/proj-x/") && seenV[0].h.authorization === "Bearer TEST-TOKEN" && !seenV[0].h["x-goog-api-key"]); ok("it sends a bearer token and never an API key");
+    await stop(x); fake.close();
+  }
+
   console.log("\nkeeper.js: " + n + " checks passed (offline, no model, no cost)");
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
