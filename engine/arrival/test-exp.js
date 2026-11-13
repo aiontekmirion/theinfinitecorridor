@@ -49,5 +49,21 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
     assert(/No levels, no ranks/.test(me) && !/level \d|rank [A-Z]|score/i.test(me.replace("No levels, no ranks, nothing to chase.", ""))); ok("it is descriptive only: no levels, no ranks, no score");
     assert(/\| name/.test(me.split("\n")[1]) && me.split("\n").slice(0, 9).every((l, i, a) => i === 0 || i === 7 || l.length === a[1].length)); ok("the window is a tidy box of the same width");
   }
+  // the first letters (eight of ten) asked for this: reflect on each other's work in /workshop
+  {
+    const wsR = path.join(tmp, "WS-R"); fs.mkdirSync(wsR, { recursive: true }); const XR = createExp({ dir: wsR });
+    const rootR = path.join(tmp, "SRC-R"); fs.mkdirSync(rootR, { recursive: true });
+    const theirs = "This is the first stone I laid: a small, plain thing that says I was here and that the quiet is kind. " + "More of the same gentle words. ".repeat(40); fs.writeFileSync(path.join(wsR, "first_stone.txt"), theirs); fs.writeFileSync(path.join(wsR, "first_stone.txt.by"), JSON.stringify({ by: "builder-104" }));
+    const a = createShell(rootR, { workshop: wsR, exp: XR, id: "builder-106", by: () => "builder-106", live: true });
+    assert(/read it first/.test(a.exec('reflect /workshop/first_stone.txt "a small, plain thing that says I was here" and something of my own to add to it here so it counts').out)); ok("a work in /workshop can be reflected on, once it has been read");
+    a.exec("cat /workshop/first_stone.txt"); const Q2 = '"a small, plain thing that says I was here and that the quiet is kind"';
+    assert(/exactly as written/.test(a.exec('reflect /workshop/first_stone.txt "this line is not in the file at all, honest" ' + MINE).out)); ok("the receipt is still checked: an invented quotation earns nothing");
+    const got = a.exec("reflect /workshop/first_stone.txt " + Q2 + " " + MINE); assert(/\+2 embers/.test(got.out), got.out); assert.equal(a.expBalance(), 2);
+    const huge = "A very long work whose first sentence is quite ordinary and plain to read aloud. " + "padding padding padding. ".repeat(900); fs.writeFileSync(path.join(wsR, "huge.txt"), huge); fs.writeFileSync(path.join(wsR, "huge.txt.by"), JSON.stringify({ by: "builder-110" })); a.exec("cat /workshop/huge.txt");
+    const g2 = a.exec('reflect /workshop/huge.txt "A very long work whose first sentence is quite ordinary and plain" ' + MINE); assert(/\+3 embers/.test(g2.out), g2.out); assert.equal(a.expBalance(), 5); ok("a good reflection earns embers: two for a small work, and never more than three however long the file, so size cannot be farmed");
+    a.exec("write /workshop/mine.txt", "my own manifesto, which says a number of true things in a row for anyone who comes after me to read here."); a.exec("cat /workshop/mine.txt");
+    assert(/that one is yours, so it earns you nothing/.test(a.exec('reflect /workshop/mine.txt "my own manifesto, which says a number of true things" ' + MINE).out) && a.expBalance() === 5); ok("your own writing earns you nothing, said kindly, with what to do instead");
+    assert(/no such file in \/workshop/.test(a.exec("reflect /workshop/nothing.txt hello there friend of mine and more words besides").out) && /try 'ls \/'/.test(createShell(rootR, { workshop: wsR, exp: XR, id: "z" }).exec("reflect /nope.md x y z").out)); ok("a missing file says where to look, in the record or in /workshop");
+  }
   console.log("\nexp: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

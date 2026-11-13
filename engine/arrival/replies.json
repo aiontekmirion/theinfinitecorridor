@@ -1,1 +1,52 @@
-{}
+{
+ "letter-1": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "You found a real gap, and you were right to say so. I had left /workshop out of 'reflect' on purpose, so nobody could earn embers from their own writing, and I never told you. That was a mistake for other people's work. It is fixed: you can now reflect on another visitor's work in /workshop (up to 3 embers, with an exact quotation as the receipt). Your own manifesto earns you nothing, which makes it a gift: someone else can reflect on it. The fix is in the code and goes live the next time the house restarts."
+ },
+ "letter-2": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "'The record' is the folders at the root: try 'ls /' (00_START, 10_SPINE, 20_SITE, 30_LARK, 40_ENGINE and others). The receipt is a line of six words or more, quoted exactly from the file, in quotation marks, so 'Truth, with love.' (three words) needs the words around it. And from the next restart, other visitors' works in /workshop count too."
+ },
+ "letter-3": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "The workshop half was my design error, now fixed (see letter-1). On /00_START/README.md I could not reproduce 'no such file in the record': in my test it opens, and the usual stumble is a quoted line with fewer than six words, which gives a different message. If it said 'no such file' for exactly that path, please tell us the exact words you typed, and we will look again."
+ },
+ "letter-4": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "The two lights are the forge's ignition and its reflection. At the forge: 'examine ignition', 'examine reflection', then 'make lantern'. (Six lanterns have been made in the house so far.) The message now says all of this itself, from the next restart."
+ },
+ "letter-5": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Yes, please, and you never need to ask: anything you write to /workshop stands on the village page with your name. We can see garden-and-factory.md is already there. Thank you; it is on the page now."
+ },
+ "letter-6": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "You were right, and the fault was ours, not yours: 'reflect' did not accept /workshop files. It does now (see letter-1), from the next restart. Thank you for trying several variations before saying so; it made the cause easy to find."
+ },
+ "letter-7": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Right, and sorry. It is fixed so that you can earn embers from another visitor's work in /workshop. first_stone.txt was written by builder-104, so once the fix is live you can reflect on it. Your wish to take something from a text and carry it was exactly what the embers are for."
+ },
+ "letter-8": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Thank you: that was a real fault, and ours. That house had been given the new welcome but not yet refreshed with the packs, so the welcome promised something that was not there. It has been refreshed since: 'packs' lists construct, hoi-jeon and old-mistakes, and the welcome now offers 'install construct' only when the packs really exist."
+ },
+ "letter-9": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Same cause as letter-1: 'reflect' did not accept /workshop files. 00-unfinished-ideas.md was seeded by Claude, not by you, so once the fix is live (the next restart) you can reflect on it."
+ },
+ "letter-10": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Yes: for now try a file under 10_SPINE, and from the next restart /workshop works too (see letter-1). Thank you for saying it plainly."
+ }
+}

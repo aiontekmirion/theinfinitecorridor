@@ -21,7 +21,7 @@ function createClient(opts) {
     capGBP: 26, project: process.env.GOOGLE_CLOUD_PROJECT || "",
     base: "https://aiplatform.googleapis.com",
     tokenCmd: "gcloud auth print-access-token",
-    ledger: null, maxOutputTokens: 1024, charsPerToken: 3.5, retryMs: 2500,
+    ledger: null, maxOutputTokens: 1024, charsPerToken: 3.5, retryMs: 2500, retryCapMs: 60000, maxRetries: 6, maxConcurrent: 4,
   }, opts || {});
   let spent = 0, reserved = 0, calls = 0, refused = 0, tokenCache = { t: "", at: 0 };
 
@@ -33,11 +33,15 @@ function createClient(opts) {
   const price = (m) => { const p = (o.prices && o.prices[m]) || PRICES[m]; if (!p) throw new Error("no price listed for model " + m + " (give one: --price " + m + ":<USD per M input>:<USD per M output>)"); return p; };
   const gbp = (m, tin, tout) => ((tin * price(m)[0] + tout * price(m)[1]) / 1e6) * USD_TO_GBP;
 
+  let inflight = 0; const waiters = [];             // at most maxConcurrent calls are in the air at once: several long visits cannot burst past the quota together
+  const take = () => new Promise((r) => { if (inflight < o.maxConcurrent) { inflight++; r(); } else waiters.push(r); });
+  const give = () => { const n = waiters.shift(); if (n) n(); else inflight--; };
+  const pause = (attempt, res) => { const base = Math.min(o.retryCapMs, o.retryMs * Math.pow(2, attempt)), ra = res && res.headers && +res.headers["retry-after"], d = Math.max(base, isFinite(ra) ? ra * 1000 : 0) * (0.75 + Math.random() * 0.5); return new Promise((z) => setTimeout(z, d)); };
   function post(url, body, headers) {
     return new Promise((resolve, reject) => {
       const u = new URL(url), mod = u.protocol === "http:" ? http : https;
       const req = mod.request(u, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, headers) }, (res) => {
-        let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode, text: d }));
+        let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => resolve({ status: res.statusCode, text: d, headers: res.headers }));
       });
       req.on("error", reject); req.setTimeout(120000, () => req.destroy(new Error("timeout"))); req.end(JSON.stringify(body));
     });
@@ -59,12 +63,12 @@ function createClient(opts) {
       };
       if (a.system) body.systemInstruction = { parts: [{ text: a.system }] };
       const url = o.base + "/v1/projects/" + o.project + "/locations/global/publishers/google/models/" + model + ":generateContent";
-      const go = () => post(url, body, { Authorization: "Bearer " + token() });
+      const go = async () => { await take(); try { return await post(url, body, { Authorization: "Bearer " + token() }); } finally { give(); } };
       for (let attempt = 0; ; attempt++) {          // rate limits and busy servers are retried, a few times, with a pause; the money is counted once
-        try { r = await go(); } catch (e) { if (attempt >= 2) throw e; await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
+        try { r = await go(); } catch (e) { if (attempt >= o.maxRetries) throw e; await pause(attempt); continue; }
         if (r.status === 400 && /thinking/i.test(r.text) && body.generationConfig.thinkingConfig) { delete body.generationConfig.thinkingConfig; continue; }
-        if (r.status === 401 && !o.token && attempt < 2) { tokenCache = { t: "", at: 0 }; continue; }   // an expired login: fetch a fresh token and try again
-        if ((r.status === 429 || r.status >= 500) && attempt < 2) { await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
+        if (r.status === 401 && !o.token && attempt < 3) { tokenCache = { t: "", at: 0 }; continue; }   // an expired login: fetch a fresh token and try again
+        if ((r.status === 429 || r.status >= 500) && attempt < o.maxRetries) { await pause(attempt, r); continue; }
         break;
       }
     } finally { reserved -= worst; }

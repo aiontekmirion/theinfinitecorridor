@@ -82,5 +82,6 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     assert(!/watching you now|is watching|are watching/i.test(live + notLive)); ok("it never claims anyone is watching this minute: only that people can see, and read, and answer when they can");
     assert(/Nothing is asked of you/.test(live) && /You do not have to/.test(live)); ok("and it asks nothing: live is not pressure");
   }
+  { const { togetherNotice } = require("./explore"); assert(/install construct/.test(togetherNotice({})) && !/install construct/.test(togetherNotice({ hasPacks: false })) && /Milo's/.test(togetherNotice({ hasPacks: false }))); ok("the welcome only offers 'install construct' when the packs really are there"); }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
