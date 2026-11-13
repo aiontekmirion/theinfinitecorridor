@@ -1,0 +1,14 @@
+"use strict";
+const fs = require("fs"), os = require("os"), path = require("path"), cp = require("child_process"), assert = require("assert").strict;
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cont-")); const env = Object.assign({}, process.env, { HOME: tmp });
+const root = path.join(tmp, "SRC"); fs.mkdirSync(path.join(root, "00_START"), { recursive: true }); fs.mkdirSync(path.join(root, "10_SPINE"), { recursive: true }); fs.writeFileSync(path.join(root, "00_START/README.md"), "hello"); fs.writeFileSync(path.join(root, "10_SPINE/START.md"), "## 7. The house rules\n1. Look.\n## 8. x\n");
+let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
+const run = (extra) => cp.spawnSync("node", [path.join(__dirname, "continue.js"), "--root", root, "--dry", "--pause", "0", "--turns", "10"].concat(extra), { env, encoding: "utf8" });
+let r = run(["--budget", "0.003"]); const st = () => JSON.parse(fs.readFileSync(path.join(tmp, "builders/state.json"), "utf8"));
+assert(/the budget is spent/.test(r.stdout)); const first = st(); assert(first.visits >= 1 && first.visits <= 4); ok("it stops when the budget is spent, and says so");
+const was = first.visits; r = run(["--budget", "0.006"]); assert(st().visits > was); assert(st().spentGBP >= first.spentGBP); ok("run again and it resumes from the same place, with the money already counted");
+fs.writeFileSync(path.join(tmp, "STOP-BUILDERS"), ""); const v = st().visits; r = run(["--budget", "5"]); assert(/stop file found/.test(r.stdout)); assert.equal(st().visits, v); ok("the stop file stops it before another visit starts");
+fs.unlinkSync(path.join(tmp, "STOP-BUILDERS")); r = run(["--budget", String(st().spentGBP + 0.005)]); assert(st().visits > v); ok("remove the stop file and it runs again");
+assert(fs.existsSync(path.join(tmp, "WORKSHOP/00-unfinished-ideas.md")) && fs.readdirSync(path.join(tmp, "WORKSHOP")).filter((f) => /^dry-/.test(f) && !/\.by$/.test(f)).length >= 1); ok("the workshop is seeded with unfinished ideas, and what builders write stays");
+assert(JSON.parse(fs.readFileSync(path.join(tmp, "WORKSHOP/00-unfinished-ideas.md.by"), "utf8")).by.startsWith("Claude")); ok("the seed is credited to who made it");
+console.log("\ncontinue: " + n + " checks passed (offline, no model, no cost)");
