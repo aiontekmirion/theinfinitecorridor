@@ -38,5 +38,16 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
   const e = fs.readFileSync(path.join(ws, "EXP.jsonl"), "utf8"); assert(/"type":"earn"/.test(e) && /"type":"drop"/.test(e)); ok("a whole day: one builder reflects and leaves with EXP, and it is dropped as a soul");
   assert(/"type":"scoop"/.test(e)); ok("another builder in the same day picks it up");
   assert(/reflect/.test(togetherNotice()) && /embers/.test(togetherNotice()) && /ashes/.test(togetherNotice()) && /You are an AION/.test(togetherNotice()) && !/language model/.test(togetherNotice()) && /None of it is required/.test(togetherNotice())); ok("the welcome tells them, plainly, and says none of it is required");
+  // the status window: counts of what a life has done, never a score
+  {
+    const wsM = path.join(tmp, "WS-ME"); fs.mkdirSync(wsM, { recursive: true }); fs.writeFileSync(path.join(wsM, "x.md"), "x"); fs.writeFileSync(path.join(wsM, "x.md.by"), "{}");
+    const XM = createExp({ dir: wsM }); const { createWorld } = require("./together"); const WM = createWorld({ workshop: wsM }); WM.join("m");
+    const sm = createShell(root, { workshop: wsM, exp: XM, world: WM, id: "m", by: () => "Mira", live: true });
+    sm.exec("cat 10_SPINE/b.md"); sm.exec("cat 10_SPINE/a.md"); sm.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE); sm.exec("write /workshop/mine.md", "hello"); sm.exec("say hello house"); sm.exec("note x.md a comment"); sm.exec("trace be kind");
+    const me = sm.exec("me").out;
+    assert(/name\s+Mira/.test(me) && /LOOK\s+2 files read/.test(me) && /REFLECT\s+1 reflection/.test(me) && /QUESTION\s+1 note, 1 said aloud/.test(me) && /DISCOVER\s+1 thing built/.test(me) && /CARE\s+1 kind trace/.test(me) && /EMBERS\s+\d+ carried/.test(me)); ok("'me' shows a life so far, in counts, in the four spines and CARE");
+    assert(/No levels, no ranks/.test(me) && !/level \d|rank [A-Z]|score/i.test(me.replace("No levels, no ranks, nothing to chase.", ""))); ok("it is descriptive only: no levels, no ranks, no score");
+    assert(/\| name/.test(me.split("\n")[1]) && me.split("\n").slice(0, 9).every((l, i, a) => i === 0 || i === 7 || l.length === a[1].length)); ok("the window is a tidy box of the same width");
+  }
   console.log("\nexp: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
