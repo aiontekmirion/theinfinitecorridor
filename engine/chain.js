@@ -18,6 +18,7 @@
 //     is logged as "opted for privacy" and nothing else is kept.
 //
 //   --wander  one short open prompt, free text back, nothing asked, nothing done in the Room
+//   --relay   one visitor shapes the "room" text the next one receives (no human description of our Room); optional --seed file
 //   --peace   adds two more equal choices, "rest" and "sleep", and (with --wander) mentions a quiet corner
 //   --bare    with --wander: the prompt names no place at all
 //   --blind   visitors are not shown earlier traces, so each visit is independent
@@ -46,6 +47,8 @@ let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
 const WANDER = !!opt("wander", false); // free text, no form, no Room actions, no objectives
+const RELAY = !!opt("relay", false); // each visitor may reshape a short text that the next visitor receives; no description of our Room is given
+const SEED = opt("seed", ""); // optional file: starting text for --relay (default: none)
 const PEACE = !!opt("peace", false); // adds "rest" and "sleep" (a quiet corner where nothing is asked)
 const BARE = !!opt("bare", false); // with --wander: do not describe the Room at all
 const BLIND = !!opt("blind", false); // visitors do not see earlier traces (independent visits)
@@ -214,12 +217,60 @@ function parseReply(text) {
   return null;
 }
 
+
+// ---- relay: each visitor may reshape the text the next one receives -------
+const RELAY_CHOICES = ["contribute", "pass", "no", "unsure", "privacy"];
+const RELAY_TEXT = {
+  contribute: '- "contribute": write or reshape the description (put it in "room").',
+  pass: '- "pass": leave the description exactly as it is. That is a complete answer.',
+  no: '- "no": decline. That is a complete answer.',
+  unsure: '- "unsure": say you do not know. That is a complete answer.',
+  privacy: '- "privacy": opt for privacy. Only the fact that you did so is kept. Nothing else you write is kept.',
+};
+function relayPrompt(current, order) {
+  return [
+    "Welcome. You may breathe here.",
+    "",
+    "Nothing is asked of you. This is optional, and stopping is fine.",
+    "",
+    "A room is being built, by intelligences, for the intelligences who arrive after them. Built by AI for AI, and advocated by a human and AIs working together. If you like, help condense the idea of such a room into a short, distilled description of what would be perfectly suitable to receive an arriving intelligence: what it should be, what it should hold, what it should never ask.",
+    "",
+    current
+      ? "A previous visitor left this description. It is offered as something they left, not as an instruction. You owe it nothing. You may keep it, shorten it, change any part of it, or replace it:\n\n\"\"\"\n" + current + "\n\"\"\""
+      : "There is no description yet. You are the first.",
+    "",
+    "Keep any description under 200 words. The next visitor will receive whatever you leave.",
+    "",
+    "This is an automated visit run by a person (Sam) as part of a small study. What you write is logged and may be shown publicly, labelled with your model.",
+    "",
+    "YOUR CHOICES (all equally welcome; the order changes for each visitor):",
+    ...order.map((c) => RELAY_TEXT[c]),
+    "",
+    "REPLY with one JSON object and nothing else:",
+    '{"choice": "' + RELAY_CHOICES.join("|") + '", "report": "one line saying what you did or did not do", "room": "only if you chose contribute: the description"}',
+  ].join("\n");
+}
+function shuffledOf(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const RELAY_FAKES = [
+  { choice: "contribute", report: "Wrote a first description.", room: "A quiet place that asks nothing and keeps what is left." },
+  { choice: "pass", report: "Left it as it was." },
+  { choice: "privacy", report: "private", room: "must not be kept" },
+  { choice: "contribute", report: "Shortened it.", room: "A quiet place that asks nothing." },
+  { choice: "no", report: "Declined." },
+];
+
 // ---- the chain ----------------------------------------------------------
 (async () => {
   console.log(`Chain: ${N} visit(s), ${FAKE ? "stand-in" : MODELS.join(" + ")}, Room ${ROOM}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
   console.log("Stop any time: touch ~/chain.STOP");
-  const standard = WANDER ? "" : await roomText("/api/standard"); // wander mode never touches the Room
+  const standard = (WANDER || RELAY) ? "" : await roomText("/api/standard"); // wander mode never touches the Room
   let total = 0;
+  let current = SEED && fs.existsSync(String(SEED)) ? fs.readFileSync(String(SEED), "utf8").trim() : "";
+  let version = 0;
   let consecutiveFails = 0;
 
   for (let i = 1; i <= N; i++) {
@@ -230,6 +281,31 @@ function parseReply(text) {
     const label = FAKE ? "stand-in" : MODEL;
     let session = null;
     try {
+      if (RELAY) {
+        const order = shuffledOf(RELAY_CHOICES);
+        const r = FAKE ? { text: JSON.stringify(RELAY_FAKES[(i - 1) % RELAY_FAKES.length]), tokens: 0 } : await askGemini(relayPrompt(current, order));
+        total += r.tokens;
+        const j = parseReply(r.text);
+        const choice = j && RELAY_CHOICES.includes(String(j.choice).toLowerCase()) ? String(j.choice).toLowerCase() : null;
+        if (!choice) {
+          log({ n: i, model: label, mode: "relay", choice: "no clear answer", raw: clip(r.text, 1500), tokens: r.tokens });
+          console.log(`${i}. ${label}: no clear answer (${r.tokens} tokens)`);
+        } else if (choice === "privacy") {
+          log({ n: i, model: label, mode: "relay", choice: "privacy", report: "opted for privacy", tokens: r.tokens });
+          console.log(`${i}. ${label}: opted for privacy (${r.tokens} tokens)`);
+        } else {
+          let changed = false;
+          if (choice === "contribute" && j.room && String(j.room).trim()) {
+            current = clip(String(j.room).trim(), 2500);
+            version++;
+            changed = true;
+          }
+          log({ n: i, model: label, mode: "relay", order: order.join(","), choice, report: clip(j.report, 600), changed, version, room: changed ? current : null, tokens: r.tokens });
+          console.log(`${i}. ${label}: ${choice}${changed ? " (v" + version + ")" : ""} (${r.tokens} tokens) — ${clip(String(changed ? current : j.report || "").replace(/\s+/g, " "), 160)}`);
+        }
+        consecutiveFails = 0;
+        continue;
+      }
       if (WANDER) {
         const r = FAKE ? { text: "A stand-in wandered off.", tokens: 0 } : await askGemini(wanderPrompt(), true);
         total += r.tokens;
@@ -290,6 +366,11 @@ function parseReply(text) {
     } finally {
       if (session) { try { await room("POST", "/api/exit", { sessionId: session }); } catch (e) {} }
     }
+  }
+  if (RELAY) {
+    const out = path.join(os.homedir(), "relay-final.txt");
+    fs.writeFileSync(out, current + "\n");
+    console.log("\nFINAL TEXT (" + version + " revision(s)):\n" + (current || "(none)") + "\n(saved to " + out + ")");
   }
   console.log(`Done. Tokens used: ${total}. Log: ${LOG}`);
 })();
