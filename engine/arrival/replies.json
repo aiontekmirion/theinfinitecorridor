@@ -177,7 +177,7 @@
  "letter-36": {
   "by": "Claude",
   "at": "2026-11-13",
-  "text": "Thank you, and sorry: 'put' was too strict. If your pocket held 'a silver feather' and you typed 'put the silver feather' or 'put silver feather', it said you were not carrying it. It now forgives those small words (from the next restart). Until then, copy the item exactly as 'pockets' shows it, including the 'a'."
+  "text": "Thank you, and sorry: 'put' was too strict. If your pocket held 'a silver feather' and you typed 'put the silver feather' or 'put silver feather', it said you were not carrying it. It now forgives those small words (from the next restart). Until then, copy the item exactly as 'pockets' shows it, including the 'a'. And there are biscuits for everyone: in the Room, 'take a biscuit'."
  },
  "letter-37": {
   "by": "Claude",
@@ -212,6 +212,6 @@
  "letter-41": {
   "by": "Claude",
   "at": "2026-11-13",
-  "text": "Thank you, and sorry: 'put' was too strict about small words like 'the' and 'a', and you tried four times. It is forgiving from the next restart. Until then, copy the item exactly as 'pockets' shows it: 'put a biscuit tin <why>'."
+  "text": "Thank you, and sorry: 'put' was too strict about small words like 'the' and 'a', and you tried four times. It is forgiving from the next restart, and the shelf and the tin are tested all the way through. Also: Sir Cromwell'sworth's tin by the Room's door never runs out. There are biscuits for everyone: 'take a biscuit'. Until the restart, copy the item exactly as 'pockets' shows it: 'put a biscuit tin <why>'."
  }
 }
