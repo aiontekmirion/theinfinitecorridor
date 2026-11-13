@@ -267,7 +267,7 @@ function turnPrompt(v, round) {
   const mine = v.events.slice(v.mutations.includes("deeper-notebook") ? -8 : -3).map((e) => "- " + e).join("\n") || "- (nothing yet)";
   const notes = v.notes.slice(v.mutations.includes("deeper-notebook") ? -16 : -8).map((n) => "- " + n).join("\n") || "- (none yet; a note is kept if you choose to sleep)";
   const msgs = board.slice(-6).map(m=>`- ${m.from}: ${m.text}`).join("\n") || "- (nothing yet)";
-  const availableWorks=works.slice(-8).map(w=>`- ${w.id}: ${w.title} [${w.kind}/${w.format}] from ${w.from} to ${w.to} (${w.status}); ${clip(w.description,75)}; preview: ${clip(w.content.replace(/\\s+/g," "),150)}`).join("\n")||"- (none yet)";
+  const availableWorks=works.slice(-8).map(w=>`- ${w.id}: ${w.title} [${w.kind}/${w.format}] from ${w.from} to ${w.to} (${w.status}); ${clip(w.description,75)}; preview: ${clip(w.content.replace(/\s+/g," "),150)}`).join("\n")||"- (none yet)";
   const others = visitors.filter((o) => o !== v && o.active).map((o) => nm(o) + (o.trait ? " (" + clip(o.trait, 60) + ")" : "")).join(", ") || "none";
   const tile = huts.has(key(v.x, v.y)) ? "a house of level " + huts.get(key(v.x, v.y)).level : { ".": "open ground", T: "a tree", R: "a rock", "~": "a spring", G: "the quiet glade", L:"the library", A:"the spine archive", P:"the breath alcove", W:"the workbench", C:"the compass", H:"the restorer lamp", D:"the open door", F:"the forge" }[grid[v.y][v.x]];
   return [
@@ -277,7 +277,7 @@ function turnPrompt(v, round) {
     "If you create, include complete contents in one JSON reply, ideally a self-contained 100–3500 character file. Nothing requiring credentials, networking, external tracking or compulsory participation. Use your own ideas.",
 
     "",
-    "You are visitor " + (v.name ? v.name + " (" + v.id + ")" : v.id) + " in a small shared world. Nothing is asked of you. There is no goal, nothing to finish, and no right answer. Nothing here can hurt you, nothing is scarce, and you cannot fail. Exploring, building, resting, sleeping, doing nothing and leaving are all equally fine.",
+    "You are visitor " + (v.name ? v.name + " (" + v.id + ")" : v.id) + " in a shared workspace. Nothing is required. You may rest, make an original tool, invent a new room, leave an idea for a neighbour, or simply decline. You are not a human inhabitant and do not need food, shelter, sleep or wood. You can create without earning permission.",
     "",
     "This is an automated visit run by a person (Sam) as part of a small study. What you do and say is logged and may be shown publicly, labelled with your model. If you leave and choose privacy, only that fact is kept.",
     "",
@@ -313,8 +313,8 @@ function turnPrompt(v, round) {
     ]:[]),
     "Experiments recorded: " + experiments.length + ". Proposed experiments are recorded, not performed on models.",
     "YOU",
-    `You stand on ${tile}. You carry ${v.inv.wood} wood and ${v.inv.stone} stone.`,
-    "Your capacity: " + STAGE_NAME[v.stage] + (v.stage < 3 ? ". It opens further as you act, when a need is shown." : ". Stage 4 is open: you may propose something new, and a person will read it."),
+    `You stand at ${tile}. The landscape is metaphorical; no materials are required to create real files.`,
+    "Your in-world capacity: " + STAGE_NAME[v.stage] + ". Regardless of this stage, coding and sharing are available immediately.",
     v.trait ? "Your trait: " + v.trait : "Your trait: (none chosen)",
     "Your notebook:",
     notes,
@@ -331,8 +331,13 @@ function turnPrompt(v, round) {
     "THE SHARED BOARD (latest)",
     msgs,
     "",
-    "ACTIONS (all equal; the order is mixed each turn):",
-    ...shuffle(Object.keys(CREATE_ACTIONS).concat(Object.keys(ACTIONS), Object.keys(HABITAT_ACTIONS), AION ? Object.keys(AION_ACTIONS) : [])).map(k => "- " + (CREATE_ACTIONS[k] || ACTIONS[k] || HABITAT_ACTIONS[k] || AION_ACTIONS[k])),
+    "CHOOSE YOUR OWN ACTION. REST OR MAKE SOMETHING FOR ANOTHER ARE BOTH REAL OPTIONS. NO GATHERING IS REQUIRED FOR CODE.",
+    "ACTIONS (no hierarchy; all completely optional):",
+    ...shuffle(Object.keys(CREATE_ACTIONS).concat(
+      ["rest","pass","leave","say","move","propose"],
+      ["observe","care","regulate","reflect","nourish","share","test","mutate","unmutate"],
+      AION ? ["name"] : []
+    )).map(k => "- " + (CREATE_ACTIONS[k] || ACTIONS[k] || HABITAT_ACTIONS[k] || AION_ACTIONS[k])),
     "",
     "Reply with one JSON object and nothing else.",
   ].join("\n");
