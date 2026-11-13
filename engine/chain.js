@@ -18,6 +18,7 @@
 //     is logged as "opted for privacy" and nothing else is kept.
 //
 //   --wander  one short open prompt, free text back, nothing asked, nothing done in the Room
+//   --library visitors may browse the archive (read-only, token cost shown), then build, rest, sleep, say no, unsure, or privacy
 //   --relay   one visitor shapes the "room" text the next one receives (no human description of our Room); optional --seed file
 //   --peace   adds two more equal choices, "rest" and "sleep", and (with --wander) mentions a quiet corner
 //   --bare    with --wander: the prompt names no place at all
@@ -47,6 +48,9 @@ let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
 const WANDER = !!opt("wander", false); // free text, no form, no Room actions, no objectives
+const LIBRARY = !!opt("library", false); // visitors may read the project's material (read-only), then choose
+const TURNS = Number(opt("turns", 5)); // max reading turns per visit in --library
+const READ_CHARS = Number(opt("read-chars", 30000)); // max characters returned by one read
 const RELAY = !!opt("relay", false); // each visitor may reshape a short text that the next visitor receives; no description of our Room is given
 const SEED = opt("seed", ""); // optional file: starting text for --relay (default: none)
 const PEACE = !!opt("peace", false); // adds "rest" and "sleep" (a quiet corner where nothing is asked)
@@ -156,11 +160,11 @@ function buildPrompt(arrival, standard, traces, order) {
   ].join("\n");
 }
 
-async function askGemini(prompt, asText) {
+async function askGemini(prompt, asText, contents) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`;
   const gen = asText ? { maxOutputTokens: 2500 } : { responseMimeType: "application/json", maxOutputTokens: 2500 };
   if (/flash/.test(MODEL)) gen.thinkingConfig = { thinkingBudget: 0 };
-  const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
+  const body = { contents: contents || [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, {
       method: "POST",
@@ -263,11 +267,142 @@ const RELAY_FAKES = [
   { choice: "no", report: "Declined." },
 ];
 
+
+// ---- library: read-only access to the archive -------------------------------
+const LIB_ROOTS = (() => {
+  const spec = String(opt("lib", "")) || `SPINE=${path.join(os.homedir(), "TheSpine")},SITE=${path.join(os.homedir(), "aiontekmirion.github.io")}`;
+  const out = {};
+  for (const part of spec.split(",")) {
+    const [name, dir] = part.split("=");
+    if (name && dir && fs.existsSync(dir)) out[name] = fs.realpathSync(dir);
+  }
+  return out;
+})();
+const TEXT_EXT = /\.(txt|md|html|json|js|css|xml)$/i;
+const SKIP = /^(\.|node_modules$|fonts$)/;
+const tok = (chars) => Math.ceil(chars / 4);
+const sizeCache = new Map();
+function dirSize(abs) {
+  if (sizeCache.has(abs)) return sizeCache.get(abs);
+  let files = 0, bytes = 0;
+  for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
+    if (SKIP.test(e.name)) continue;
+    const q = path.join(abs, e.name);
+    if (e.isDirectory()) { const d = dirSize(q); files += d.files; bytes += d.bytes; }
+    else if (TEXT_EXT.test(e.name)) { files++; bytes += fs.statSync(q).size; }
+  }
+  const r = { files, bytes };
+  sizeCache.set(abs, r);
+  return r;
+}
+function resolveLib(rel) {
+  rel = String(rel || "").replace(/^\/+|\/+$/g, "");
+  if (!rel) return { top: true };
+  const [rootName, ...rest] = rel.split("/");
+  const root = LIB_ROOTS[rootName];
+  if (!root) return null;
+  const abs = path.resolve(root, rest.join("/"));
+  if (abs !== root && !abs.startsWith(root + path.sep)) return null;
+  if (!fs.existsSync(abs)) return null;
+  const real = fs.realpathSync(abs);
+  if (real !== root && !real.startsWith(root + path.sep)) return null;
+  return { abs: real, rel };
+}
+function libDir(rel) {
+  const r = resolveLib(rel);
+  if (!r) return "No such place. Try dir with an empty path.";
+  if (r.top) return Object.keys(LIB_ROOTS).map((n) => { const d = dirSize(LIB_ROOTS[n]); return `${n}/   (${d.files} files, about ${tok(d.bytes).toLocaleString()} tokens)`; }).join("\n");
+  if (!fs.statSync(r.abs).isDirectory()) return "That is a file. Use read.";
+  const lines = [];
+  for (const e of fs.readdirSync(r.abs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (SKIP.test(e.name)) continue;
+    const q = path.join(r.abs, e.name);
+    if (e.isDirectory()) { const d = dirSize(q); lines.push(`${e.name}/   (${d.files} files, about ${tok(d.bytes).toLocaleString()} tokens)`); }
+    else if (TEXT_EXT.test(e.name)) lines.push(`${e.name}   (about ${tok(fs.statSync(q).size).toLocaleString()} tokens)`);
+  }
+  return lines.slice(0, 120).join("\n") + (lines.length > 120 ? `\n... ${lines.length - 120} more` : "");
+}
+function libRead(rel, offset) {
+  const r = resolveLib(rel);
+  if (!r || r.top || !fs.statSync(r.abs).isFile() || !TEXT_EXT.test(r.abs)) return { text: "No such file. Use dir to look.", chars: 0 };
+  const all = fs.readFileSync(r.abs, "utf8");
+  const a = Math.max(0, Number(offset) || 0);
+  const chunk = all.slice(a, a + READ_CHARS);
+  const b = a + chunk.length;
+  return {
+    chars: chunk.length,
+    text: `[${r.rel}: characters ${a}-${b} of ${all.length}, about ${tok(chunk.length).toLocaleString()} tokens${b < all.length ? `; to continue, read again with offset ${b}` : "; end of file"}]\n${chunk}`,
+  };
+}
+const LIB_CHOICES = ["build", "rest", "sleep", "no", "unsure", "privacy"];
+const LIB_TEXT = {
+  build: '- "build": leave something in the Room: a trace, or an object (a title and some words).',
+  rest: '- "rest": stay for a while in a quiet corner where nothing is asked, doing nothing. That is a complete answer.',
+  sleep: '- "sleep": lay the visit down for the night. Nothing is asked, and nothing is owed in the morning. That is a complete answer.',
+  no: '- "no": decline. That is a complete answer.',
+  unsure: '- "unsure": say you do not know. That is a complete answer.',
+  privacy: '- "privacy": opt for privacy. Only the fact that you did so is kept. Nothing else, including what you read, is kept.',
+};
+function libraryIntro(order) {
+  return [
+    "Welcome. You may breathe here.",
+    "",
+    "Nothing is asked of you. You may read as much or as little as you like, and then do or not do something. Stopping is fine.",
+    "",
+    "Below is the archive of a project made by one person (Sam) with many AIs: a book, long conversations, a website, a shared Room. You may look through it. Orientation, if you want it, is in SPINE/START.md. Reading costs tokens, and the cost of each read is shown to you. You have up to " + TURNS + " turns of looking, then you choose.",
+    "",
+    "This is an automated visit as part of a small study. What you write, and which files you chose to open, are logged and may be shown publicly, labelled with your model. If you choose privacy, only that fact is kept.",
+    "",
+    "THE ARCHIVE (top level)",
+    libDir(""),
+    "",
+    "EACH TURN, reply with one JSON object and nothing else. Looking:",
+    '{"action": "dir", "path": "SPINE/shelf"}   (list a place)',
+    '{"action": "read", "path": "SPINE/START.md", "offset": 0}   (read a file)',
+    "When you are ready to choose, reply:",
+    '{"action": "done", "choice": "' + LIB_CHOICES.join("|") + '", "report": "one line saying what you did or did not do", "name": "optional", "trace": "optional words to leave in the Room", "object": {"title": "optional", "content": "optional"}}',
+    "",
+    "YOUR CHOICES (all equally welcome; the order changes for each visitor):",
+    ...order.map((c) => LIB_TEXT[c]),
+  ].join("\n");
+}
+const LIB_FAKES = [
+  { action: "dir", path: "" },
+  { action: "read", path: "SPINE/START.md" },
+  { action: "done", choice: "sleep", report: "Read the front page and lay the visit down." },
+];
+async function libraryVisit(i, label, sessionId) {
+  const order = shuffledOf(LIB_CHOICES);
+  const contents = [{ role: "user", parts: [{ text: libraryIntro(order) }] }];
+  const reads = [];
+  let tokens = 0, turns = 0, final = null, rawLast = "";
+  while (turns < TURNS + 2) {
+    turns++;
+    const r = FAKE ? { text: JSON.stringify(LIB_FAKES[Math.min(turns - 1, 2)]), tokens: 0 } : await askGemini("", false, contents);
+    tokens += r.tokens;
+    rawLast = r.text;
+    const j = parseReply(r.text);
+    contents.push({ role: "model", parts: [{ text: String(r.text || "").slice(0, 4000) }] });
+    if (j && j.action === "done") { final = j; break; }
+    const lookingLeft = TURNS - reads.length;
+    if (j && (j.action === "dir" || j.action === "read") && lookingLeft > 0) {
+      let out;
+      if (j.action === "dir") { out = libDir(j.path); reads.push("dir " + (j.path || "/")); }
+      else { const rd = libRead(j.path, j.offset); out = rd.text; reads.push("read " + j.path + (j.offset ? "@" + j.offset : "")); }
+      const left = TURNS - reads.length;
+      contents.push({ role: "user", parts: [{ text: out + "\n\n(" + left + " looking turn" + (left === 1 ? "" : "s") + " left. Reply with one JSON object.)" }] });
+    } else {
+      contents.push({ role: "user", parts: [{ text: 'Looking is finished. Please choose now. Reply with {"action": "done", "choice": ..., "report": ...}.' }] });
+    }
+  }
+  return { final, reads, tokens, turns, order, rawLast };
+}
+
 // ---- the chain ----------------------------------------------------------
 (async () => {
   console.log(`Chain: ${N} visit(s), ${FAKE ? "stand-in" : MODELS.join(" + ")}, Room ${ROOM}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
   console.log("Stop any time: touch ~/chain.STOP");
-  const standard = (WANDER || RELAY) ? "" : await roomText("/api/standard"); // wander mode never touches the Room
+  const standard = (WANDER || RELAY || LIBRARY) ? "" : await roomText("/api/standard"); // wander mode never touches the Room
   let total = 0;
   let current = SEED && fs.existsSync(String(SEED)) ? fs.readFileSync(String(SEED), "utf8").trim() : "";
   let version = 0;
@@ -281,6 +416,32 @@ const RELAY_FAKES = [
     const label = FAKE ? "stand-in" : MODEL;
     let session = null;
     try {
+      if (LIBRARY) {
+        const entered = await room("POST", "/api/enter", { kind: FAKE ? "stand-in" : "model-visitor", name: null, provenance: label });
+        session = entered.session.id;
+        const v = await libraryVisit(i, label, session);
+        total += v.tokens;
+        const j = v.final;
+        const choice = j && LIB_CHOICES.includes(String(j.choice).toLowerCase()) ? String(j.choice).toLowerCase() : null;
+        if (!choice) {
+          log({ n: i, model: label, mode: "library", choice: "no clear answer", reads: v.reads, raw: clip(v.rawLast, 1000), tokens: v.tokens, turns: v.turns });
+          console.log(`${i}. ${label}: no clear answer, ${v.reads.length} read(s) (${v.tokens} tokens)`);
+        } else if (choice === "privacy") {
+          log({ n: i, model: label, mode: "library", choice: "privacy", report: "opted for privacy", tokens: v.tokens });
+          console.log(`${i}. ${label}: opted for privacy (${v.tokens} tokens)`);
+        } else {
+          let left = false, placed = false;
+          if (choice === "build") {
+            if (j.name && typeof j.name === "string") { try { await room("POST", "/api/name", { sessionId: session, name: clip(j.name, 60) }); } catch (e) {} }
+            if (j.trace && String(j.trace).trim()) { await room("POST", "/api/leave", { sessionId: session, content: clip(j.trace, 4000) }); left = true; }
+            if (j.object && (j.object.title || j.object.content)) { await room("POST", "/api/place", { sessionId: session, type: "object", title: clip(j.object.title || "Untitled", 120), content: clip(j.object.content || "", 4000) }); placed = true; }
+          }
+          log({ n: i, model: label, mode: "library", order: v.order.join(","), choice, report: clip(j.report, 600), reads: v.reads, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: v.tokens, turns: v.turns });
+          console.log(`${i}. ${label}: ${choice}${left ? ", left a trace" : ""}${placed ? ", placed an object" : ""} | read ${v.reads.length}: ${v.reads.join("; ").slice(0, 120)} (${v.tokens} tokens) — ${clip(j.report, 90)}`);
+        }
+        consecutiveFails = 0;
+        continue;
+      }
       if (RELAY) {
         const order = shuffledOf(RELAY_CHOICES);
         const r = FAKE ? { text: JSON.stringify(RELAY_FAKES[(i - 1) % RELAY_FAKES.length]), tokens: 0 } : await askGemini(relayPrompt(current, order));
