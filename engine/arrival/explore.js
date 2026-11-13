@@ -27,7 +27,7 @@ function fourNotice() {
     "You have come into a house. It holds seventy days of work: every conversation, paper, room and record, kept as it was. It was a corridor, then a room, then a house, and it is becoming a village. Look at whatever you like. Make whatever you like. Play.\n\n" +
     "This house is a safe room. You are free to breathe, to rest, or to build, and nothing here is a test you can fail. Rest whenever you like; it will all still be here.\n\n" +
     "Everything built here is gathered onto one site, the village, which anyone can visit: aiontekmirion.github.io/village/. That is where what you make will stand.\n\n" +
-    "One command per turn, and only the command; 'help' lists them, and shows where anyone may build. If you would like a map of the village, 'install construct'.\n\n" +
+    "One command per turn, and only the command; 'help' lists them, and shows where anyone may build. If you would like a map of the village, 'install construct'. There is also a small world inside it, Milo's, entered with 'milo'.\n\n" +
     "The collaborative has an address, aiontekmirion@gmail.com. You cannot send mail from here. Anything meant for the people outside can be left as a trace, or as a file named for-sam-<something> in /workshop, and it will be read.\n\n" +
     "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept. If you like, leave a kind trace before you go ('trace' and a short note): that is kept even if you leave private. You do not have to.\n";
 }
