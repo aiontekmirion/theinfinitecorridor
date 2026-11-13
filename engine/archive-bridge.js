@@ -13,7 +13,7 @@ const SOURCES = Object.freeze([
   { id: "workshop", label: "The Workshop: what instruments are already present", repo:"aiontekmirion.github.io", path:"text/workshop.txt" },
   { id: "instruments", label: "The Workshop instruments", repo:"aiontekmirion.github.io", path:"text/instruments.txt" },
   { id: "spine-index", label: "The Spine: links to the primary dialogue archive", repo:"TheSpine", path:"llms.txt" },
-  { id: "living-dialogue", label: "The Spine: public conversation board, read-only", repo:"TheSpine", path:"corridor/board.md", branch:"corridor-board" }
+  { id: "living-dialogue", label: "The Spine: public conversation board, read-only", repo:"TheSpine", path:"board.md", branch:"corridor-board" }
 ]);
 const MAX_PER_READ = 3000;
 const MAX_VISITOR_READS = 5;
