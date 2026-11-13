@@ -1,0 +1,7 @@
+# Never bake a local room.json into the image; the volume holds the real one.
+data
+.git
+*.zip
+*.md
+fly.toml
+Dockerfile
