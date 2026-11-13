@@ -4,11 +4,12 @@ process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vtx-"));
 const { createClient } = require("./vertex");
 const ledger = require("../ledger");
 let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
-let mode = "normal", seen = [];
+let mode = "normal", seen = [], hits = 0;
 const srv = http.createServer((req, res) => {
   let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
     seen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(b) });
     res.setHeader("Content-Type", "application/json");
+    if (mode === "once429" && hits++ === 0) { res.statusCode = 429; return res.end(JSON.stringify({ error: { message: "busy" } })); }
     if (mode === "nousage") return res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "hi" }] } }] }));
     if (mode === "err") { res.statusCode = 403; return res.end(JSON.stringify({ error: { message: "denied" } })); }
     res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "hello there" }] } }], usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 0 } }));
@@ -29,6 +30,7 @@ const srv = http.createServer((req, res) => {
   r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert(r.gbp > 0); ok("a reply with no usage numbers is not treated as free");
   mode = "err"; c = createClient({ base, project: "p", token: "T", capGBP: 5, ledger: L });
   try { await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.fail("should throw"); } catch (e) { assert.equal(e.status, 403); } ok("an error is raised, never hidden");
+  mode = "once429"; hits = 0; c = createClient({ base, project: "p", token: "T", capGBP: 5, retryMs: 5 }); r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.equal(r.text, "hello there"); assert.equal(hits, 2); assert(Math.abs(c.stats().spentGBP - r.gbp) < 1e-4); ok("a rate limit is retried, and the money is counted once");
   L.close({}); const f = L.file || fs.readdirSync(path.join(process.env.HOME, "ledger")).map((x) => path.join(process.env.HOME, "ledger", x))[0];
   assert.equal(ledger.verify(f).ok, true); ok("every call is in the ledger and the hash chain verifies");
   console.log("\nvertex.js: " + n + " checks passed (offline, no model, no cost)"); srv.close(); process.exit(0);

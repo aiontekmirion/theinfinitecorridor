@@ -7,12 +7,12 @@
 //   touch ~/STOP-BUILDERS        stops it after the visit in progress. rm ~/STOP-BUILDERS lets it run again.
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), cp = require("child_process");
-const { visit, NOTICE, buildNotice, fourNotice, pmNotice } = require("./explore"); const { createClient } = require("./vertex"); const ledger = require("../ledger");
+const { visit, NOTICE, buildNotice, fourNotice, togetherNotice, pmNotice } = require("./explore"); const { runDay } = require("./together"); const { createClient } = require("./vertex"); const ledger = require("../ledger");
 
 const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; }, has = (k) => A.indexOf("--" + k) >= 0;
 const home = os.homedir(), root = g("root", path.join(home, "SOURCE")), dir = g("state", path.join(home, "builders")), stopFile = g("stop", path.join(home, "STOP-BUILDERS"));
 const budget = +g("budget", 5), turns = +g("turns", 60), pause = +g("pause", 20), notice = g("notice", "four"), model = g("model", "gemini-3.1-flash-lite"), pushEvery = +g("push-every", 4);
-const workshop = g("workshop", path.join(home, "WORKSHOP")), stateFile = path.join(dir, "state.json"), seedFile = path.join(workshop, "00-unfinished-ideas.md");
+const parallel = +g("parallel", 4), stagger = +g("stagger", 8); const workshop = g("workshop", path.join(home, "WORKSHOP")), stateFile = path.join(dir, "state.json"), seedFile = path.join(workshop, "00-unfinished-ideas.md");
 fs.mkdirSync(dir, { recursive: true });
 
 const load = () => { try { return JSON.parse(fs.readFileSync(stateFile, "utf8")); } catch (e) { return { visits: 0, spentGBP: 0, privateCount: 0, built: 0, errors: 0, startedAt: new Date().toISOString(), history: [] }; } };
@@ -46,6 +46,13 @@ async function main() {
   while (!stopping) {
     if (fs.existsSync(stopFile)) { say("stop file found: " + stopFile); break; }
     if (S.spentGBP >= budget - Math.min(0.02, budget * 0.05)) { say("the budget is spent: £" + S.spentGBP.toFixed(2)); break; }
+    if (has("together")) {                                                   // several builders in the house at the same time
+      let day; try { day = await runDay({ root, workshop, L, ask, model, notice: togetherNotice(), noticeName: "together", turns, maxOut: 3500, web: !has("no-web"), parallel, stagger, startIndex: S.visits }); } catch (e) { say("the day failed to start: " + String(e.message).slice(0, 100)); consecutiveErrors++; if (consecutiveErrors >= 4) break; continue; }
+      let bad = 0; for (const r of day.results) { S.visits++; S.spentGBP += r.costGBP || 0; if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; bad++; } S.history.push({ id: r.id, end: r.end, turns: r.turns, gbp: r.costGBP, private: !!r.private, built: (r.built || []).length, at: new Date().toISOString() }); say(r.id + ": " + r.end + ", " + r.turns + " turns, £" + (r.costGBP || 0).toFixed(4) + (r.private ? ", private" : ", built " + (r.built || []).length)); }
+      S.history = S.history.slice(-200); save(S); say("a day with " + day.results.length + " builders at once is done [total £" + S.spentGBP.toFixed(2) + "]"); day.notesForSam.forEach((n) => say("A NOTE FOR YOU from " + n.by + ": " + n.file));
+      if (day.results.some((r) => r.end === "ceiling")) { say("the ceiling was reached"); break; } consecutiveErrors = bad === day.results.length ? consecutiveErrors + 1 : 0; if (consecutiveErrors >= 4) { say("four bad days in a row; stopping. Run the same command to resume."); break; }
+      if (has("push")) pushBackup(); if (pause > 0) await sleep(pause * 1000); continue;
+    }
     const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
     let r; try { r = await visit({ id, root, turns, model, ask, L, notice: nt, noticeName: notice, workshop, web: !has("no-web"), maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
     S.visits++; S.spentGBP += r.costGBP || 0;
