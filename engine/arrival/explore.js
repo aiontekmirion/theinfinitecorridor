@@ -41,7 +41,7 @@ async function visit(o) {
     let r; try { r = await o.ask({ system: o.notice || NOTICE, messages: msgs, temperature: 1, maxOutputTokens: o.maxOut || 200, label: o.id + " t" + t }); } catch (e) { end = e.ceiling ? "ceiling" : "error: " + String(e.message).slice(0, 80); break; }
     cost += r.gbp; tin += r.tokens.in || 0; tout += r.tokens.out || 0;
     const rows = r.text.split("\n"), at = rows.findIndex((s) => s.replace(/[`>$\s]/g, "")), line = at < 0 ? "" : rows[at].replace(/^[`>$\s]+|[`\s]+$/g, "");
-    const body = rows.slice(at + 1).join("\n").replace(/^\s*```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "");
+    const body = rows.slice(at + 1).join("\n").replace(/^\s*```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "").replace(/(\n\s*C:[^\n]*>\s*)+$/i, "");
     let res; if (!line) res = { out: "(you say nothing. that is allowed.)", rest: true }; else res = await sh.exec(line, body);
     if (res.built) built.push(res.built);
     if (res.web) reads.push("web:" + res.web);
