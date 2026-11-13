@@ -290,7 +290,7 @@ function apply(v, j) {
     case "say": {
       const t = clip(String(j.text || "").trim(), 200);
       if (!t) { ok = false; msg = "Nothing to say."; break; }
-      board.push({ from: nm(v), round: 0, text: t }); msg = "You said it on the board.";
+      board.push({ from: nm(v), vid: v.id, round: 0, text: t }); msg = "You said it on the board.";
       break;
     }
     case "adapt": {
@@ -414,6 +414,9 @@ function fakeTurn(v) {
   return { action: "move", dir: pick(["n", "s", "e", "w"]) };
 }
 
+// What may be shown: nothing said by a visitor who left and chose privacy.
+const publicBoard = () => board.filter((m) => { const w = byId(m.vid); return !(w && w.privacy); }).map(({ vid, ...rest }) => rest);
+
 // ---- output ------------------------------------------------------------------
 function flushLedger(reason) {
   if (flushed) return;
@@ -424,7 +427,7 @@ function flushLedger(reason) {
     else for (const t of v.led) L.append("turn", { ...t, privacy: false });
   }
   for (const p of proposals) { const who = byId(p.from); if (who && who.privacy) continue; L.append("proposal", { from: p.from, model: p.model, text: p.text }); }
-  L.append("world", { grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board, names: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlier: v.names, trait: v.trait, stage: v.stage })) });
+  L.append("world", { grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board: publicBoard(), names: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlier: v.names, trait: v.trait, stage: v.stage })) });
   L.close({ ended: reason, turns: RUN.turns, tokens: RUN.tokens, estimatedCostGBP: Number(costGBP().toFixed(4)) });
 }
 function flushLog(reason) {
@@ -441,9 +444,24 @@ function flushLog(reason) {
     lines.push(JSON.stringify({ proposal: true, from: p.from, model: FAKE ? "stand-in" : p.model, text: p.text }));
   }
   fs.appendFileSync(LOG, lines.join("\n") + "\n");
-  fs.writeFileSync(STATE, JSON.stringify({ seed: SEED, grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board, visitors: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlierNames: v.names, model: v.model, x: v.x, y: v.y, stage: v.stage, trait: v.trait, built: v.built, gathered: v.gathered })) }, null, 1));
+  fs.writeFileSync(STATE, JSON.stringify({ seed: SEED, grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board: publicBoard(), visitors: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlierNames: v.names, model: v.model, x: v.x, y: v.y, stage: v.stage, trait: v.trait, built: v.built, gathered: v.gathered })) }, null, 1));
+}
+function listen() {
+  console.log("\nWHAT THEY SAID (in the order it was said)");
+  const pb = publicBoard();
+  if (pb.length) for (const m of pb) console.log(`  [round ${m.round}] ${m.from}: ${m.text}`);
+  else console.log("  (nothing was said on the board)");
+  const traits = visitors.filter((v) => v.trait && !v.privacy);
+  if (traits.length) { console.log("How they chose to be:"); for (const v of traits) console.log(`  ${nm(v)}: ${v.trait}`); }
+  const notes = visitors.filter((v) => v.notes.length && !v.privacy);
+  if (notes.length) { console.log("Notes they kept for themselves when they slept:"); for (const v of notes) for (const n of v.notes) console.log(`  ${nm(v)}: ${n}`); }
+  const props = proposals.filter((p) => { const w = byId(p.from); return !(w && w.privacy); });
+  if (props.length) { console.log("What they wished would exist (for you to read; never carried out automatically):"); for (const p of props) console.log(`  ${p.from}: ${p.text}`); }
+  const left = visitors.filter((v) => !v.active);
+  if (left.length) console.log("Left the village: " + left.map((v) => v.id + (v.privacy ? " (chose privacy)" : "")).join(", "));
 }
 function summary() {
+  listen();
   const act = {};
   for (const v of visitors) if (!v.privacy) for (const b of v.buf) act[b.action] = (act[b.action] || 0) + 1;
   const lv = [...huts.values()].reduce((s, h) => s + h.level, 0);
@@ -510,7 +528,8 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
     v.buf.push({ round, usedModel: r.model, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: r.j ? clip(JSON.stringify(r.j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens: r.tokens });
     v.led.push({ round, visitor: v.id, model: r.model, prompt: r.prompt, reply: r.raw, action: res.a, ok: res.ok, result: res.msg, tokens: r.tokens, error: r.err || null, position: [v.x, v.y] });
     if (res.a === "say") board[board.length - 1].round = round;
-    console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : r.model || v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${r.tokens ? " [" + r.tokens + " tok]" : ""}`);
+    const words = r.j && res.ok ? ({ say: r.j.text, adapt: r.j.trait, propose: r.j.text, sleep: r.j.note, name: r.j.name, label: r.j.text })[res.a] : null;
+    console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : r.model || v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${words ? "\u201c" + clip(String(words).replace(/\s+/g, " "), 240) + "\u201d" : clip(res.msg, 90)}${r.tokens ? " [" + r.tokens + " tok]" : ""}`);
   }
   function mustStop() {
     if (fs.existsSync(STOP)) return "kill switch";
