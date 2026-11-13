@@ -43,9 +43,13 @@ A mixed village (each builder gets the next model in the list, in turn, and its 
 3. **Watch the money.** The runner counts its own estimate and has a hard ceiling (`--budget`). Google's Billing report is the independent check. The account is a free trial, so it stops at zero and charges nothing.
 4. **Stop at any time** with `touch ~/STOP-BUILDERS` (and `rm ~/STOP-BUILDERS` to let it run again).
 
+## Thinking models can come back empty
+
+Some stronger models "think" before they answer, and the output cap (`maxOutputTokens`, 3500 for builders) **includes** the thinking. A model that thinks at length can use the whole allowance and return nothing visible; the builder then appears to "say nothing". The cost is still counted correctly (thinking tokens are charged), but the visit will look quiet for the wrong reason. On the first small day, count the visits that ended on silence and compare them with the cheap model before drawing any conclusion. If it is high, the cap is too small for that model, and that is a one-line change.
+
 ## What to look for, and what not to conclude
 
-Whether a stronger model stays longer, builds things other than silence and echoes, reads more widely, uses `tell` to ask for things, takes the packs. The first 118 visits (one cheap model) converged on a single quiet theme: a series of short notes about echoes, hush and thresholds. That is a finding about that model in that house, and no more. Do not claim anything about experience or consciousness from any of it.
+Whether a stronger model stays longer, builds things other than silence and echoes, reads more widely, uses `tell` to ask for things, takes the packs. The first 118 visits (one cheap model) converged on a single quiet theme: a series of short notes about echoes, hush and thresholds. That is a finding about that model in that house, and no more. Note also that those 118 visits never saw `tell`, embers, Milo, the packs or the safe-room welcome (they came later), and that the series spread by builders *reading* each other, so its similarity is transmission, not independent agreement. Do not claim anything about experience or consciousness from any of it.
 
 ## Rules that do not change
 
