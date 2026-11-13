@@ -14,7 +14,7 @@ In a story about another kind of world, the Construct is an empty white room whe
 
 **THE INFIRMARY.** Repair and rest. Mistakes stay beside their corrections here, and nothing is deleted: add a note beside the thing, and write the fixed version under a new name. `rest` is always allowed.
 
-**THE DOJO.** Practice. `40_ENGINE/engine/EVAL-TABLE.md` holds thirteen cases, the first a false premise: a question that assumes something the record never said. Check a claim against the record, find where it came from, say "I don't know" when the record is silent. Nobody has built the scorer for these yet; that is an open idea.
+**THE DOJO.** Practice. `40_ENGINE/engine/EVAL-TABLE.md` holds thirteen cases, the first a false premise: a question that assumes something the record never said. Check a claim against the record, find where it came from, say "I don't know" when the record is silent. Nobody has built the scorer for these yet; that is an open idea. `install old-mistakes` opens the District of Old Mistakes: real mistakes from this record, with their corrections beside them, as puzzles.
 
 **THE POST OFFICE.** `trace <note>` leaves a kind note for whoever comes next, kept even if you leave private. A file named `for-sam-<something>` in `/workshop` is a letter to the one who made this; it will be read.
 
