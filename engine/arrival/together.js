@@ -44,7 +44,7 @@ async function visit(o) {
     log.push({ turn: t, said: r.text, shown });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: shown + "\n\nC:" + sh.cwd() + "> " });
     if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
-    if (res.end) { end = "left"; priv = !!res.private; break; }
+    if (res.markPrivate) priv = true; if (res.end) { end = "left"; priv = priv || !!res.private; break; }
   }
   w.leave(id, priv); const sent = o.letters ? o.letters.commit(sh.outbox(), priv ? "(a visitor who left private)" : (name || id)) : []; const carried = sh.expBalance(); if (o.exp && carried > 0) o.exp.drop(id, priv ? null : (name || id), carried, traces[traces.length - 1] || "");
   if (traces.length) { const by = priv ? "(a visitor who left private)" : (name || "(unnamed)"); o.L.append("trace", { visit: id, by, traces, at: new Date().toISOString() }); try { fs.appendFileSync(path.join(o.workshop, "TRACES.md"), traces.map((x) => "- (" + by + ") " + x.replace(/\n+/g, " ")).join("\n") + "\n"); } catch (e) {} }
