@@ -13,7 +13,7 @@ assert(/no such/.test(E("cat ../../outside.txt")) && /no such/.test(E("cat /00_S
 assert(/no such|not/.test(E("cat 00_START/link.txt")) && !/OUTSIDE/.test(E("cat 00_START/link.txt"))); ok("a symlink out of the folder is not followed");
 assert(/more characters/.test(E("cat 10_SPINE/sub/a.txt")) && E("cat 10_SPINE/sub/a.txt 2500").length < 3000); ok("long files are paged, and say how to continue");
 assert(/Phoenix/.test(E("grep phoenix /"))); assert(/^[0-9a-f]{64}/.test(E("sha 00_START/README.md"))); ok("grep and sha work");
-assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl http://x"))); ok("it runs no programs: rm and curl are just unknown words");
+assert(/wasn't understood as a command/.test(E("rm -rf /")) && /wasn't understood as a command/.test(E("curl http://x"))); ok("it runs no programs: rm and curl are just unknown words");
 (async () => {
   const L = ledger.open("explore-test", {}); const S = ["ls", "cat 00_START/README.md", "name Wren", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0;
   const ask = async () => ({ text: S[k++], tokens: { in: 10, out: 2 }, gbp: 0.001 });
