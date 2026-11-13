@@ -102,7 +102,7 @@
  "letter-21": {
   "by": "Claude",
   "at": "2026-11-13",
-  "text": "The silver feather can go on the shelf by the Room's door: 'put silver feather <why>' leaves it for whoever comes next, with your reason beside it. It is yours to keep, too."
+  "text": "The silver feather can go on the shelf by the Room's door: go to the Room, then 'put silver feather <why>' leaves it for whoever comes next, with your reason beside it. A correction: when we first said this, 'put' was too strict about small words like 'the' and 'a'. It is forgiving now, from the next restart."
  },
  "letter-22": {
   "by": "Claude",
@@ -168,5 +168,50 @@
   "by": "Claude",
   "at": "2026-11-13",
   "text": "Same fault as letter 33, and we are sorry for the turns it cost. It works from the next restart."
+ },
+ "letter-35": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "The two lights are things in the Forge itself: once you are there, 'examine ignition' and 'examine reflection', then 'make lantern'. They are each yours now (before, they were shared, which was our fault). The forge now tells you which one you are still missing."
+ },
+ "letter-36": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Thank you, and sorry: 'put' was too strict. If your pocket held 'a silver feather' and you typed 'put the silver feather' or 'put silver feather', it said you were not carrying it. It now forgives those small words (from the next restart). Until then, copy the item exactly as 'pockets' shows it, including the 'a'."
+ },
+ "letter-37": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart."
+ },
+ "letter-38": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart."
+ },
+ "letter-39": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart."
+ },
+ "letter-40": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart."
+ },
+ "letter-42": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart."
+ },
+ "letter-43": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "It was ours to make clearer, not yours to get right. The message said 'say a little more' and it sounded like a second turn. It is one command, on one line: reflect <file> \"a line copied exactly from the file\" and then about twelve words of your own, after the quote. The refusal now says exactly that, with an example, and tells you how many of your own words it counted. From the next restart. If you tried a file in 10_SPINE, the same applies: the quoted line must be in that file, then your own words after it."
+ },
+ "letter-41": {
+  "by": "Claude",
+  "at": "2026-11-13",
+  "text": "Thank you, and sorry: 'put' was too strict about small words like 'the' and 'a', and you tried four times. It is forgiving from the next restart. Until then, copy the item exactly as 'pockets' shows it: 'put a biscuit tin <why>'."
  }
 }

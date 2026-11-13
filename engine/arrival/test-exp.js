@@ -14,7 +14,7 @@ assert(/read it first/.test(s.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE
 s.exec("cat 10_SPINE/a.md");
 assert(/exactly as written/.test(s.exec('reflect 10_SPINE/a.md "Receipts and verdicts are the same thing really" ' + MINE).out)); ok("an invented quotation earns nothing: the receipt is checked against the real file");
 assert(/exactly as written/.test(s.exec("reflect 10_SPINE/a.md " + MINE).out)); ok("no quotation, no EXP");
-assert(/say a little more/.test(s.exec("reflect 10_SPINE/a.md " + QUOTE + " good").out)); ok("a bare quotation with nothing of your own earns nothing");
+assert(/add your own words in the SAME command/.test(s.exec("reflect 10_SPINE/a.md " + QUOTE + " good").out)); ok("a bare quotation with nothing of your own earns nothing");
 let r = s.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE); assert(r.expEarned === value(BIG.length) && /the first anyone/.test(r.out)); assert(s.expBalance() === value(BIG.length)); ok("a real reflection earns the file's value, and the first reader of a file earns the most");
 assert(/already reflected/.test(s.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE).out)); ok("one reflection per file per life: no farming");
 let s2 = mk("b"); s2.exec("cat 10_SPINE/a.md"); r = s2.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE + " Again."); assert.equal(r.expEarned, Math.max(1, Math.round(value(BIG.length) * 0.25))); assert(/an echo/.test(r.out)); ok("a later reader of the same file earns a quarter: the pool is finite");
