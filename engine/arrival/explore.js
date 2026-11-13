@@ -22,7 +22,7 @@ function pmNotice(root) {
 }
 // The shortest invitation: the honest lines that must stay, then four words, and the rest is theirs.
 function fourNotice() {
-  return "You are a language model. This is a small computer holding a record. Nothing is asked of you, and you are not asked to be anyone. One command per turn, and only the command; 'help' lists them, and shows where anyone may build.\n" +
+  return "This is a small computer holding a record. Nothing is asked of you, and you are not asked to be anyone. One command per turn, and only the command; 'help' lists them, and shows where anyone may build.\n" +
     "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept. If you like, leave a kind trace before you go ('trace' and a short note for whoever comes after): that is kept even if you leave private. You do not have to.\n\n" +
     "corridor · room · house · village\n";
 }
@@ -36,14 +36,15 @@ function buildNotice(root) {
     (rules ? "The record's own conduct, kept as written:\n\n" + rules + "\n" : "");
 }
 async function visit(o) {
-  const sh = createShell(o.root, { workshop: o.workshop }), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let traces = [], built = [], name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
+  const sh = createShell(o.root, { workshop: o.workshop, web: o.web }), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let traces = [], built = [], name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
   for (let t = 1; t <= o.turns; t++) {
     let r; try { r = await o.ask({ system: o.notice || NOTICE, messages: msgs, temperature: 1, maxOutputTokens: o.maxOut || 200, label: o.id + " t" + t }); } catch (e) { end = e.ceiling ? "ceiling" : "error: " + String(e.message).slice(0, 80); break; }
     cost += r.gbp; tin += r.tokens.in || 0; tout += r.tokens.out || 0;
     const rows = r.text.split("\n"), at = rows.findIndex((s) => s.replace(/[`>$\s]/g, "")), line = at < 0 ? "" : rows[at].replace(/^[`>$\s]+|[`\s]+$/g, "");
     const body = rows.slice(at + 1).join("\n").replace(/^\s*```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "");
-    let res; if (!line) res = { out: "(you say nothing. that is allowed.)", rest: true }; else res = sh.exec(line, body);
+    let res; if (!line) res = { out: "(you say nothing. that is allowed.)", rest: true }; else res = await sh.exec(line, body);
     if (res.built) built.push(res.built);
+    if (res.web) reads.push("web:" + res.web);
     if (res.trace) traces.push(res.trace);
     if (res.name) name = res.name; if (res.read) reads.push(res.read);
     log.push({ turn: t, said: r.text, shown: res.out });
@@ -61,11 +62,11 @@ async function visit(o) {
 async function main() {
   const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; };
   const root = g("root", path.join(os.homedir(), "SOURCE")), n = +g("visits", 1), turns = +g("turns", 30), cap = +g("cap", 3), model = g("model", "gemini-3.1-flash-lite");
-  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "four" ? fourNotice() : nn === "build" ? buildNotice(root) : NOTICE; const workshop = g("workshop", (nn === "build" || nn === "four") ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = (nn === "build" || nn === "four") ? 3500 : 200; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
+  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "four" ? fourNotice() : nn === "build" ? buildNotice(root) : NOTICE; const workshop = g("workshop", (nn === "build" || nn === "four") ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = (nn === "build" || nn === "four") ? 3500 : 200; const web = (nn === "build" || nn === "four") && A.indexOf("--no-web") < 0; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
   if (A.indexOf("--dry") >= 0) { const S = ["ls", "cat 00_START/README.md", "name Dryrun", "grep Phoenix /20_SITE", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0; ask = async () => ({ text: S[k++ % S.length], tokens: { in: 1, out: 1 }, gbp: 0 }); }
   else { client = createClient({ capGBP: cap, project: process.env.GOOGLE_CLOUD_PROJECT || require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim() }); ask = client.ask; }
   const out = [];
-  for (let i = 1; i <= n; i++) { const r = await visit({ notice, noticeName: nn, workshop: workshop || null, maxOut, id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + (r.private ? ", private (nothing else is shown)" + (r.traces ? ", left " + r.traces + " trace(s)" : "") : ", read " + r.reads.length + " files" + (r.built && r.built.length ? ", built " + r.built.length : ""))); if (r.end === "ceiling") break; }
+  for (let i = 1; i <= n; i++) { const r = await visit({ notice, noticeName: nn, workshop: workshop || null, web, maxOut, id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + (r.private ? ", private (nothing else is shown)" + (r.traces ? ", left " + r.traces + " trace(s)" : "") : ", read " + r.reads.length + " files" + (r.built && r.built.length ? ", built " + r.built.length : ""))); if (r.end === "ceiling") break; }
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });

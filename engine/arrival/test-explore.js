@@ -48,5 +48,15 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     const sh2 = createShell(root); assert(/usage/.test(sh2.exec("trace").out) && /600/.test(sh2.exec("trace " + "x".repeat(601)).out)); ok("an empty or very long trace is refused kindly");
     const lines = fs.readdirSync(path.join(tmp, "ledger")).map((f) => fs.readFileSync(path.join(tmp, "ledger", f), "utf8")).join(""); assert(/"type":"trace"/.test(lines)); ok("the trace is also in the ledger");
   }
+  // the internet: read-only, public https pages only; the cloud machine's neighbours are out of reach
+  {
+    const { blockedAddr, checkUrl } = require("./shell");
+    for (const a of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1", "224.0.0.1"]) assert(blockedAddr(a), a);
+    for (const a of ["8.8.8.8", "140.82.112.3", "172.32.0.1", "2606:4700::1111"]) assert(!blockedAddr(a), a); ok("private, loopback, link-local and metadata addresses are blocked; public ones are not");
+    for (const u of ["http://example.com", "ftp://example.com/x", "https://user:pw@example.com", "https://example.com:8443/", "https://127.0.0.1/", "https://169.254.169.254/computeMetadata/v1/", "https://[::1]/", "https://localhost/", "https://metadata.google.internal/computeMetadata/v1/", "https://printer.local/", "javascript:alert(1)", "not a url"]) assert.throws(() => checkUrl(u), undefined, u);
+    assert(checkUrl("https://raw.githubusercontent.com/aiontekmirion/TheSpine/main/START.md")); ok("only plain public https addresses pass: no http, no logins, no odd ports, no localhost or .internal");
+    const shw = createShell(root, { web: true }); let r2 = await shw.exec("web https://169.254.169.254/computeMetadata/v1/"); assert(/not allowed/.test(r2.out)); r2 = await shw.exec("web https://localhost/"); assert(/not allowed/.test(r2.out)); r2 = await shw.exec("web http://example.com/"); assert(/could not read/.test(r2.out)); ok("the shell refuses them in plain words and shows nothing from them");
+    assert(/no internet/.test((await createShell(root).exec("web https://example.com/")).out)); ok("with the web switched off there is none");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
