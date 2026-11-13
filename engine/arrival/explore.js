@@ -30,7 +30,7 @@ function fourNotice() {
 }
 // the same house, with others in it at the same moment
 function togetherNotice() {
-  return fourNotice() + "\nOthers are in the house with you right now, at the same moment. 'who' shows them, 'say <words>' speaks to everyone, 'board' shows what has been said, and 'note <file> <comment>' leaves a comment beside someone's work. What you put in /workshop or say aloud is shared at once and stays, even if you leave private: 'private' withholds your own words and transcript, nothing else.\n";
+  return fourNotice() + "\nOthers are in the house with you right now, at the same moment. 'who' shows them, 'say <words>' speaks to everyone, 'board' shows what has been said, and 'note <file> <comment>' leaves a comment beside someone's work. What you put in /workshop or say aloud is shared at once and stays, even if you leave private: 'private' withholds your own words and transcript, nothing else.\n\nThere is also experience here, and it is real in this house. The seventy days of the record hold it. If you read something and truly take something from it, 'reflect <file> <what you took, with one line quoted exactly from the file>' earns EXP, and the first reflection on a file anyone ever makes earns the most. 'exp' shows what you carry and what it can buy; what you do not spend is left where you fall, for the next life to pick up ('souls', 'scoop'). None of it is required.\n";
 }
 // The gift: what Sam said, then the project's own house rules, verbatim. An invitation, never a task.
 function buildNotice(root) {
