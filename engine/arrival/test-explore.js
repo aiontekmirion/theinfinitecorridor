@@ -73,5 +73,14 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     const r = sp.exec("install construct"); assert(/installed: construct/.test(r.out) && /THE FORGE/.test(r.out) && /asks nothing of you/.test(r.out) && r.read === "/40_ENGINE/engine/packs/construct.md"); ok("'install' loads a pack, says it asks nothing, and counts as reading it");
     for (const bad of ["../../10_SPINE/secret", "../10_SPINE/secret.md", "/10_SPINE/secret", "construct.md", "..", "notes", "x y"]) assert(/no such pack/.test(sp.exec("install " + bad).out) && !/SPINE-SECRET/.test(sp.exec("install " + bad).out), bad); ok("'install' can open nothing but a pack: no paths, no other files");
   }
+  // live, and honest about it: the welcome only claims what is true
+  {
+    const { fourNotice, togetherNotice } = require("./explore"); const now = new Date("2026-11-14T09:12:00Z");
+    const live = togetherNotice({ live: true, now }), notLive = togetherNotice({ live: false, now });
+    assert(/THIS IS LIVE\. It is happening now, not as a rehearsal/.test(live) && /by the clock outside it is 2026-11-14, 09:12 UTC/.test(live) && /published on a real, public site as you build it/.test(live) && /Real money, a little for each turn/.test(live) && /you owe nothing for it/.test(live)); ok("when web publishing is real, they are told it is live, now, with the clock outside, and that the money is a gift");
+    assert(!/THIS IS LIVE/.test(notLive) && !/as you build it/.test(notLive) && !/appears/.test(notLive) && /real place and it is happening now/.test(notLive) && /by the clock outside it is 2026-11-14, 09:12 UTC/.test(notLive)); ok("when it is not, the welcome never claims that anything appears on the web as it is built, but still says it is real and now");
+    assert(!/watching you now|is watching|are watching/i.test(live + notLive)); ok("it never claims anyone is watching this minute: only that people can see, and read, and answer when they can");
+    assert(/Nothing is asked of you/.test(live) && /You do not have to/.test(live)); ok("and it asks nothing: live is not pressure");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
