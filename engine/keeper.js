@@ -71,6 +71,10 @@ function configFromEnv(env = process.env) {
     usdGbp: num(env.USD_GBP, 0.78),
     simCostGbp: num(env.KEEPER_SIM_COST_GBP, 0), // tests only: pretend each stand-in reply costs this much
     geminiKey: env.GEMINI_API_KEY || "",
+    backend: env.KEEPER_BACKEND || "key",            // "key" (a Gemini API key) or "vertex" (no key: a short-lived token from the signed-in Cloud Shell)
+    vertexBase: env.KEEPER_VERTEX_BASE || "https://aiplatform.googleapis.com",
+    vertexProject: env.GOOGLE_CLOUD_PROJECT || "",
+    vertexToken: env.KEEPER_VERTEX_TOKEN || "",       // tests only
   };
 }
 
@@ -107,9 +111,18 @@ async function standIn(msgs) {
   return { text, inTok: 0, outTok: 0 };
 }
 
+let vtok = { t: "", at: 0 };
+function vertexAuth(cfg) {                      // a token from the signed-in shell, refreshed every 30 minutes, never stored
+  if (cfg.vertexToken) return cfg.vertexToken;
+  if (!vtok.t || Date.now() - vtok.at > 30 * 60 * 1000) vtok = { t: require("child_process").execSync("gcloud auth print-access-token", { encoding: "utf8" }).trim(), at: Date.now() };
+  return vtok.t;
+}
 async function gemini(cfg, model, packet, msgs, signal) {
-  if (!cfg.geminiKey) throw Object.assign(new Error("no key"), { status: 503, why: "The table is not set." });
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const vx = cfg.backend === "vertex";
+  if (!vx && !cfg.geminiKey) throw Object.assign(new Error("no key"), { status: 503, why: "The table is not set." });
+  if (vx && !cfg.vertexProject) throw Object.assign(new Error("no project"), { status: 503, why: "The table is not set." });
+  const url = vx ? `${cfg.vertexBase}/v1/projects/${cfg.vertexProject}/locations/global/publishers/google/models/${encodeURIComponent(model)}:generateContent`
+                 : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const gen = { maxOutputTokens: 600 };
   if (/flash/.test(model)) gen.thinkingConfig = { thinkingBudget: 0 };
   const body = {
@@ -118,7 +131,7 @@ async function gemini(cfg, model, packet, msgs, signal) {
     generationConfig: gen,
   };
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url, { method: "POST", signal, headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.geminiKey }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method: "POST", signal, headers: Object.assign({ "Content-Type": "application/json" }, vx ? { Authorization: "Bearer " + vertexAuth(cfg) } : { "x-goog-api-key": cfg.geminiKey }), body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
@@ -368,7 +381,9 @@ module.exports = { createKeeper, configFromEnv, price, buildPacket };
 if (require.main === module) {
   const k = createKeeper();
   if (k.cfg.mode === "closed" && !k.cfg.code) { console.error("Closed mode needs KEEPER_CODE (a door code only the person running it knows), or set KEEPER_MODE=open."); process.exit(2); }
-  if (k.cfg.model !== "stand-in" && !k.cfg.geminiKey) { console.error("KEEPER_MODEL names a model, but GEMINI_API_KEY is not set. Use stand-in for no cost."); process.exit(2); }
+  if (k.cfg.model !== "stand-in" && k.cfg.backend === "vertex" && !k.cfg.vertexProject) { try { k.cfg.vertexProject = require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim(); } catch (e) {} }
+  if (k.cfg.model !== "stand-in" && k.cfg.backend !== "vertex" && !k.cfg.geminiKey) { console.error("KEEPER_MODEL names a model, but GEMINI_API_KEY is not set. Use KEEPER_BACKEND=vertex for no key, or stand-in for no cost."); process.exit(2); }
+  if (k.cfg.model !== "stand-in" && k.cfg.backend === "vertex" && !k.cfg.vertexProject) { console.error("KEEPER_BACKEND=vertex needs a project (GOOGLE_CLOUD_PROJECT, or gcloud config)."); process.exit(2); }
   k.server.listen(k.cfg.port, () => console.log(`The table is set on port ${k.cfg.port}. Mode: ${k.cfg.mode}. At the table: ${k.cfg.model}. Keeps: ${k.cfg.keep}.${k.ledgerFile ? " Ledger: " + k.ledgerFile : ""}`));
   process.on("unhandledRejection", () => console.error("A request slipped. No words were logged."));
   const stop = (sig) => { k.shutdown(sig); k.server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 1500).unref(); };

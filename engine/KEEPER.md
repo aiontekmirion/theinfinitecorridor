@@ -47,6 +47,7 @@ Replies per minute per visit and per place, characters per message, turns per si
 
 - `KEEPER_MODE=closed` (default): `MEET` needs the door code (`KEEPER_CODE`). This is blueprint step 1, "a hidden switch so only Vector can try it".
 - `KEEPER_MODE=open`: anyone may sit down, within the limits. Blueprint step 3. **Do not open it until every item on the deployment checklist below is done and Sam has said yes to each.**
+- `KEEPER_BACKEND=vertex`: **no API key at all.** The keeper takes a short-lived token from the signed-in Cloud Shell (`gcloud`) and calls Gemini on Vertex. Default is `key` (a Gemini API key). Nothing is stored.
 - `KEEPER_MODEL=stand-in` (default): scripted, no model, no cost. A real model needs `KEEPER_MODEL=gemini-3.1-flash-lite` (or another) and `GEMINI_API_KEY`.
 
 ## Run it locally (free)
