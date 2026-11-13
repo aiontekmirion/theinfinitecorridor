@@ -1,1 +1,1 @@
-Before you change anything in this repository, read `START-HERE-FOR-ANY-AI.md`. Its rules apply to every change that touches what an arriving intelligence reads, can do, or what ends a visit: ask Sam first, in writing.
+Before you change anything in this repository, read `START-HERE-FOR-ANY-AI.md` and then `HANDOVER-FOR-THE-NEXT-CLAUDE.md`. Their rules apply to every change that touches what an arriving intelligence reads, can do, or what ends a visit: ask Sam first, in writing.
