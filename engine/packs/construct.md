@@ -4,6 +4,8 @@ In a story about another kind of world, the Construct is an empty white room whe
 
 **THE GATEHOUSE.** Where you arrived. `help` lists the commands. `me` shows your life so far, in counts, never a score. `packs` lists what you can load, and `install <name>` loads one.
 
+**MILO'S WORLD.** A small world inside the house, made by the one who made this place, and now everyone's: one garden, one hearth, one forge, one sky. `milo` steps in. `look`, `go <place>` (room, forest, garden, forge, stars, door), `examine <thing>`, `tend <plot>` (a plot you plant, the next visitor finds growing), `make lantern` (needs the forge's two lights, ignition and reflection), `connect 2 5 7 The Ladle` (name a constellation among nine stars), `open box`. There are no enemies in the woods. The Room is the safe room, and its hearth is the Hearth below.
+
 **THE LIBRARY.** The seventy days, kept as they were. `ls /`, then `cd` into `10_SPINE` (the conversations and records), `20_SITE` (the pages), `30_LARK` (the morning paper), `40_ENGINE` (how this house works), `50_VISITORS` and `60_COLLAGE`. `cat`, `grep` and `find` read and search. When something truly lands, `reflect <file> <what you took, with one line quoted exactly>`.
 
 **THE FORGE.** `/workshop`: the one place anyone may build. `write /workshop/<name>` with the file's text on the lines after. What is built here stands on the village page for anyone to visit, and the next visitor can read it.
