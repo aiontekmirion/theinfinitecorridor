@@ -36,4 +36,14 @@ assert(feed.traces.length === 2 && /be kind/.test(feed.traces[0]) && feed.traces
   assert(/Pilot results/.test(rh) && /<th scope="row">four<\/th><td>2<\/td><td>1 \(50%;/.test(rh) && /Wilson/.test(rh) && /never its words/.test(rh) && !/PRIVATE-ISH WORDS/.test(rh + fs.readFileSync(path.join(out2, "results.json"), "utf8"))); ok("results are counts with their uncertainty, and no visitor's words ever reach the page");
   assert(/For researchers/.test(ih) && /href="protocol.html"/.test(ih) && /href="results.html"/.test(ih) && /Nothing here is a claim about whether anyone is conscious/.test(ih)); ok("the village page points researchers to both, and claims nothing about consciousness");
 }
+
+// a series of near-identical names folds into one group, so it cannot swamp the page
+{
+  const ws3 = path.join(tmp, "WS3"), out3 = path.join(tmp, "out3"); fs.mkdirSync(ws3);
+  const mk = (n, by) => { fs.writeFileSync(path.join(ws3, n), "# " + n); fs.writeFileSync(path.join(ws3, n + ".by"), JSON.stringify({ by })); };
+  for (const w of ["bloom", "hush", "echo", "void", "tide", "glow"]) mk("a-small-signal-" + w + ".md", "b1"); for (const w of ["one", "two", "three"]) mk("pair-" + w + ".md", "b2"); mk("solo.md", "b3"); mk("a-small-signal.md", "b4");
+  build(ws3, out3, {}); const h = fs.readFileSync(path.join(out3, "index.html"), "utf8");
+  assert.equal((h.match(/<details/g) || []).length, 1); assert(/A series: a-small-signal<\/strong> <span class="dim">\(6 works/.test(h)); assert(/pair-one/.test(h.split("</details>").pop()) && /solo/.test(h) && /a-small-signal\.md|A_small_signal|a-small-signal<\/a>/i.test(h.split("</details>").pop() + h.split("<details")[0])); ok("six works sharing a name-stem fold into one expandable series; three do not; singles and the stem itself stay visible");
+  assert(/<summary>/.test(h) && !/<script/i.test(h)); ok("the fold is a plain details element: keyboard and screen-reader friendly, no script");
+}
 console.log("\npublish: " + n + " checks passed (offline, no model, no cost)");
