@@ -1,0 +1,13 @@
+"use strict";
+const fs = require("fs"), os = require("os"), path = require("path"), assert = require("assert").strict;
+const { summarise, markdown, wilson } = require("./summarise");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sum-")); let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
+const line = (data, at) => JSON.stringify({ type: "visit", at: at || "2026-11-13T10:00:00Z", data }) + "\n";
+fs.writeFileSync(path.join(tmp, "a.jsonl"), line({ notice: "default", private: true, turns: 10, costGBP: 0.002, model: "m" }) + line({ notice: "default", private: false, turns: 20, reads: ["a", "b", "c"], built: ["x"], traces: 1, costGBP: 0.004, model: "m", transcript: [{ said: "SECRET WORDS" }] }) + line({ notice: "default", private: false, turns: 12, reads: ["a"], built: [], costGBP: 0.003, model: "m", end: "error: model 401: x" }) + line({ notice: "pm", private: false, turns: 30, reads: [], built: ["y", "z"], letters: 2, costGBP: 0.01, model: "m" }, "2026-11-14T10:00:00Z") + JSON.stringify({ type: "turn", at: "x", data: {} }) + "\n{not json\n");
+const S = summarise([tmp, path.join(tmp, "missing")]);
+assert.equal(S.visits, 4); assert.equal(S.arms.length, 2); const d = S.arms.find((a) => a.arrival === "default"); assert.equal(d.visits, 3); assert.equal(d.private, 1); assert.equal(d.privateRate, 0.333); ok("it counts visits and who left private, per arrival text, and ignores lines that are not visits");
+assert.equal(d.turnsMean, 14, "mean of 10,20,12"); assert.equal(d.turnsMedian, 12); assert.equal(d.filesReadMean, 2); assert.equal(d.builtMean, 0.5); assert.equal(d.traces, 1); assert.equal(S.arms.find((a) => a.arrival === "pm").letters, 2); ok("stay length, reading, building, traces and letters are computed from open visits; private ones add only length and cost");
+assert.equal(d.ends.error, 1); assert.equal(S.costGBP, 0.019); assert.equal(S.from.slice(0, 10), "2026-11-13"); assert.equal(S.to.slice(0, 10), "2026-11-14"); ok("errors are counted, cost is summed, and the date window is reported");
+const [lo, hi] = wilson(1, 3); assert(lo > 0.05 && lo < 0.1 && hi > 0.7 && hi < 0.8); assert.deepEqual(wilson(0, 0), [0, 0]); ok("the interval is the honest, wide one that three visits deserve");
+const md = markdown(S); assert(/\| default \| 3 \|/.test(md) && /Counts only/.test(md) && !/SECRET WORDS/.test(JSON.stringify(S) + md)); ok("it never reads or prints a visitor's words");
+console.log("\nsummarise: " + n + " checks passed (offline, no model, no cost)");

@@ -63,6 +63,7 @@ function createClient(opts) {
       for (let attempt = 0; ; attempt++) {          // rate limits and busy servers are retried, a few times, with a pause; the money is counted once
         try { r = await go(); } catch (e) { if (attempt >= 2) throw e; await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
         if (r.status === 400 && /thinking/i.test(r.text) && body.generationConfig.thinkingConfig) { delete body.generationConfig.thinkingConfig; continue; }
+        if (r.status === 401 && !o.token && attempt < 2) { tokenCache = { t: "", at: 0 }; continue; }   // an expired login: fetch a fresh token and try again
         if ((r.status === 429 || r.status >= 500) && attempt < 2) { await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
         break;
       }
