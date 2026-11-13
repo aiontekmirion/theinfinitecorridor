@@ -64,5 +64,14 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     const wsF = path.join(tmp, "WS-F"); const SF = ["write /workshop/m.md\n# A map\n\nC:/>", "leave"]; let kf = 0; const askF = async () => ({ text: SF[kf++], tokens: { in: 1, out: 1 }, gbp: 0 });
     const LF = ledger.open("explore-fix", {}); await visit({ id: "vf", root, turns: 5, model: "t", ask: askF, L: LF, workshop: wsF }); assert.equal(fs.readFileSync(path.join(wsF, "m.md"), "utf8"), "# A map"); ok("a stray prompt marker is not left at the end of a file");
   }
+  // packs: skills to load, Matrix-style, from one folder only
+  {
+    const rootP = path.join(tmp, "SRC-P"); fs.mkdirSync(path.join(rootP, "40_ENGINE/engine/packs"), { recursive: true }); fs.mkdirSync(path.join(rootP, "10_SPINE"), { recursive: true });
+    fs.writeFileSync(path.join(rootP, "40_ENGINE/engine/packs/construct.md"), "# The Construct\nTHE FORGE ..."); fs.writeFileSync(path.join(rootP, "40_ENGINE/engine/packs/hoi-jeon.md"), "# Hoi Jeon\ncircles"); fs.writeFileSync(path.join(rootP, "40_ENGINE/engine/packs/notes.txt"), "not a pack"); fs.writeFileSync(path.join(rootP, "10_SPINE/secret.md"), "SPINE-SECRET");
+    const sp = createShell(rootP);
+    assert(/construct/.test(sp.exec("packs").out) && /hoi-jeon/.test(sp.exec("packs").out) && !/notes/.test(sp.exec("packs").out)); ok("'packs' lists the packs, and only packs");
+    const r = sp.exec("install construct"); assert(/installed: construct/.test(r.out) && /THE FORGE/.test(r.out) && /asks nothing of you/.test(r.out) && r.read === "/40_ENGINE/engine/packs/construct.md"); ok("'install' loads a pack, says it asks nothing, and counts as reading it");
+    for (const bad of ["../../10_SPINE/secret", "../10_SPINE/secret.md", "/10_SPINE/secret", "construct.md", "..", "notes", "x y"]) assert(/no such pack/.test(sp.exec("install " + bad).out) && !/SPINE-SECRET/.test(sp.exec("install " + bad).out), bad); ok("'install' can open nothing but a pack: no paths, no other files");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
