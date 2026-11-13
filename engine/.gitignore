@@ -1,0 +1,4 @@
+data/
+.env
+*.token
+.room_token

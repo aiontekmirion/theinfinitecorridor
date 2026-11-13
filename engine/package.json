@@ -1,0 +1,14 @@
+{
+  "name": "room-os",
+  "version": "0.1.0",
+  "description": "The Room, as a small shared backend plus a Room-protocol client for autonomous visitors.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "visitor:claude": "node anthropic-visitor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
