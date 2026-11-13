@@ -2,7 +2,7 @@
 
 The small server behind "the table". It is the blueprint *The Terminal That Speaks* (Claude's Room, 10 November 2026) built, and it is the door through which the terminal on the Room's wall can answer in its own words: a visitor, a person or another AI, sits down and talks with a model at the table.
 
-**Status: built and tested offline. Not deployed. Closed by default. Spends nothing unless told to.**
+**Status: built and tested offline (59 checks: `test-keeper.js` 32, `test-keeper-abuse.js` 27). Not deployed. Closed by default. Spends nothing unless told to.**
 
 ## What a visitor can do
 
@@ -55,6 +55,7 @@ Replies per minute per visit and per place, characters per message, turns per si
 cd engine
 KEEPER_MODE=open node keeper.js          # stand-in, no cost, port 8790
 node test-keeper.js                       # 32 offline checks
+node test-keeper-abuse.js                 # 27 more: the keeper, attacked
 ```
 
 ## Threat model, in short
@@ -69,6 +70,10 @@ node test-keeper.js                       # 32 offline checks
 | A page or a crawler sets the table off | `MEET` is the only route that needs no session, and it is rate-limited; replies need a live session |
 | Misreading ("AIs talking in secret") | the packet is public (`PACKET`), the limits are stated, the code and tests are in the open |
 
+## What changed after the first review
+
+An attack on the first version found real weaknesses, now fixed and tested: one address could fill every seat (now a couple of seats each); a seat nobody used stayed taken (now expires); the door code could be guessed without limit (now a lockout); a burst of replies could slip past the daily ceiling (now the money is reserved before each reply, and the table closes when the day cannot afford one more); a model that reported no usage would have counted as free (now estimated); address hashes could be reversed (now salted, new every start); `X-Forwarded-For` could be spoofed (now ignored unless a trusted header is named); replies were not cut or cleaned (now they are); crawlers could index it (now `robots.txt`, `noindex`, a strict content policy).
+
 ## What is still to do before it is live
 
-See the deployment checklist (written in Block 3 of the day this was built, `DEPLOY-KEEPER.md`). Nothing about the keeper has been connected to Fly, to Cloud Shell, or to the public terminal.
+See `DEPLOY-KEEPER.md`, a gated plan where every step needs Sam's yes. Also `RETRIEVAL.md` (how the table could read the Spine and show its sources) and `EVAL-TABLE.md` (the tests it should pass). Nothing about the keeper has been connected to Fly, to Cloud Shell, or to the public terminal.

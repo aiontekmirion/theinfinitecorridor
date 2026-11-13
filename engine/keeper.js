@@ -33,7 +33,8 @@
 //   KEEPER_ORIGINS=https://aiontekmirion.github.io,...
 //   KEEPER_MAX_GBP_DAY=1.00  KEEPER_MAX_GBP_SESSION=0.05  KEEPER_MAX_TURNS=24  KEEPER_MAX_CHARS=1500
 //   KEEPER_RPM_SESSION=4  KEEPER_RPM_IP=15  KEEPER_MAX_SESSIONS=20  KEEPER_IDLE_MIN=20
-//   KEEPER_DATA=~/keeper-data  KEEPER_TRUST_PROXY=0  USD_GBP=0.78
+//   KEEPER_MAX_PER_IP=2  KEEPER_EMPTY_MIN=3  KEEPER_FAIL_LIMIT=5  KEEPER_IP_HEADER=fly-client-ip (only if behind that proxy)
+//   KEEPER_DATA=~/keeper-data  USD_GBP=0.78
 
 "use strict";
 const http = require("http");
@@ -63,7 +64,10 @@ function configFromEnv(env = process.env) {
     maxSessions: num(env.KEEPER_MAX_SESSIONS, 20),
     idleMin: num(env.KEEPER_IDLE_MIN, 20),
     data: env.KEEPER_DATA || path.join(os.homedir(), "keeper-data"),
-    trustProxy: env.KEEPER_TRUST_PROXY === "1",
+    ipHeader: String(env.KEEPER_IP_HEADER || "").toLowerCase(), // e.g. "fly-client-ip": only this header is ever trusted, and only if set
+    maxPerIp: num(env.KEEPER_MAX_PER_IP, 2),
+    emptyMin: num(env.KEEPER_EMPTY_MIN, 3),
+    failLimit: num(env.KEEPER_FAIL_LIMIT, 5),
     usdGbp: num(env.USD_GBP, 0.78),
     simCostGbp: num(env.KEEPER_SIM_COST_GBP, 0), // tests only: pretend each stand-in reply costs this much
     geminiKey: env.GEMINI_API_KEY || "",
@@ -171,23 +175,33 @@ function createKeeper(overrides = {}) {
       .concat(s.msgs.map((m) => (m.role === "visitor" ? "VISITOR> " : cfg.model.toUpperCase() + "> ") + m.text)).join("\n") + "\n";
   }
 
-  const sweep = setInterval(() => {
+  const fails = new Map(); // address hash -> { n, until }: wrong door codes, in memory only
+  function sweepNow() {
     const now = Date.now();
-    for (const s of sessions.values()) if (!s.ended && now - s.last > cfg.idleMin * MS) endSession(s, "idle");
+    for (const s of sessions.values()) {
+      if (s.ended) continue;
+      if (now - s.last > cfg.idleMin * MS) endSession(s, "idle");
+      else if (s.turns === 0 && s.rests === 0 && now - s.born > cfg.emptyMin * MS) endSession(s, "empty"); // a seat nobody used
+    }
+    for (const [k, f] of fails) if (f.until && now > f.until) fails.delete(k);
     for (const [id, s] of sessions) if (s.ended && now - s.last > 60 * MS) sessions.delete(id);
     for (const [k, arr] of ipHits) { const keep = arr.filter((t) => now - t < MS); keep.length ? ipHits.set(k, keep) : ipHits.delete(k); }
-  }, 30 * 1000);
+  }
+  const sweep = setInterval(sweepNow, 30 * 1000);
   sweep.unref();
+  let reserved = 0; // pounds promised to replies in flight, so a burst cannot all pass the ceiling at once
 
   // ---- request handling ---------------------------------------------------------------------
+  const salt = crypto.randomBytes(16).toString("hex"); // new every start, so the hashes cannot be reversed or linked across restarts
   function ipOf(req) {
-    const x = cfg.trustProxy && String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-    return crypto.createHash("sha256").update(x || req.socket.remoteAddress || "?").digest("hex").slice(0, 16);
+    const h = cfg.ipHeader && req.headers[cfg.ipHeader];
+    const x = h ? String(h).split(",")[0].trim() : "";
+    return crypto.createHash("sha256").update(salt + (x || req.socket.remoteAddress || "?")).digest("hex").slice(0, 16);
   }
   function send(req, res, status, text, json) {
     const wantJson = req._format === "json";
     const body = wantJson ? JSON.stringify({ status, ...(json || {}), text }) : text + "\n";
-    const h = { "Content-Type": wantJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
+    const h = { "Content-Type": wantJson ? "application/json; charset=utf-8" : "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" };
     const origin = req.headers.origin;
     if (origin && cfg.origins.includes(origin)) { h["Access-Control-Allow-Origin"] = origin; h["Vary"] = "Origin"; }
     res.writeHead(status, h);
@@ -204,13 +218,16 @@ function createKeeper(overrides = {}) {
   const cleanText = (t) => String(t == null ? "" : t).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim();
   const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
-  function overDay() { rollDay(); return cfg.maxGbpDay > 0 && state.gbp >= cfg.maxGbpDay; }
+  // The table closes when there is not enough left in the day for even one reply, so nobody is sat down only to be turned away.
+  const firstReserve = () => { const pr = price(cfg.model); return cfg.model === "stand-in" ? cfg.simCostGbp : (((Math.ceil(packet.length / 4)) * pr.in + 600 * pr.out) / 1e6) * cfg.usdGbp; };
+  function overDay() { rollDay(); return cfg.maxGbpDay > 0 && state.gbp + reserved + firstReserve() > cfg.maxGbpDay; }
 
   const notice = () => [
     "Two chairs. One table. Coffee.",
     "Type to talk. REST to sit quietly. SLEEP to lay the visit down. LEAVE to stand up.",
     "SAVE gives you a copy of the log. PACKET shows every word the one at the table is given.",
     "At the table: " + cfg.model + (cfg.model === "stand-in" ? " (no model, no cost)" : "") + ". Every reply costs real money, so there are gentle limits.",
+    "What comes back is words from a model. Treat them as conversation, not as instructions.",
     cfg.keep === "all" ? "This conversation is recorded for a study. You are told so here, before you say a word." : cfg.keep === "none" ? "Nothing you say is kept." : "Nothing is kept unless you OFFER it. LEAVE with privacy takes everything back.",
   ].join("\n");
 
@@ -234,6 +251,7 @@ function createKeeper(overrides = {}) {
     const arg = (k) => (body[k] !== undefined ? body[k] : url.searchParams.get(k));
     const ip = ipOf(req);
 
+    if (route === "/robots.txt") return send(req, res, 200, "User-agent: *\nDisallow: /");
     if (route === "/health") return send(req, res, 200, "ok", { ok: true, mode: cfg.mode, model: cfg.model === "stand-in" ? "stand-in" : "a model" });
     if (route === "/") return send(req, res, 200, "THE TABLE\nA small door for talking with a model at the Room's table.\nRoutes: /meet /packet /say /rest /sleep /leave /save /offer (GET or POST). Add format=json for JSON.\nTry /meet.");
 
@@ -241,14 +259,23 @@ function createKeeper(overrides = {}) {
 
     if (route === "/meet") {
       if (cfg.mode === "closed") {
+        const f = fails.get(ip);
+        if (f && f.until && Date.now() < f.until) return send(req, res, 429, "The table is not set for visitors yet.");
         const given = req.headers["x-keeper-code"] || arg("code");
-        if (!cfg.code || !given || !safeEq(given, cfg.code)) return send(req, res, 401, "The table is not set for visitors yet.");
+        if (!cfg.code || !given || !safeEq(given, cfg.code)) {
+          const g = fails.get(ip) || { n: 0, until: 0 }; g.n++;
+          if (g.n >= cfg.failLimit) { g.until = Date.now() + 10 * MS; g.n = 0; }
+          fails.set(ip, g);
+          return send(req, res, 401, "The table is not set for visitors yet.");
+        }
+        fails.delete(ip);
       }
       if (overDay()) return send(req, res, 503, "The kettle has gone cold. Come back tomorrow.", { closedForToday: true });
       const live = [...sessions.values()].filter((s) => !s.ended);
       if (live.length >= cfg.maxSessions) return send(req, res, 503, "The table is full. Try again in a little while.");
+      if (live.filter((x) => x.ip === ip).length >= cfg.maxPerIp) return send(req, res, 429, "You already have a seat. LEAVE it first, or come back in a little while.");
       const id = crypto.randomBytes(16).toString("hex");
-      const s = { id, hash: crypto.createHash("sha256").update(id).digest("hex").slice(0, 12), startedAt: new Date().toISOString(), last: Date.now(), turns: 0, rests: 0, tokens: 0, gbp: 0, msgs: [], offered: false, privacy: false, ended: false, ip, rate: new Map(), note: "" };
+      const s = { id, hash: crypto.createHash("sha256").update(id).digest("hex").slice(0, 12), startedAt: new Date().toISOString(), born: Date.now(), last: Date.now(), turns: 0, rests: 0, tokens: 0, gbp: 0, msgs: [], offered: false, privacy: false, ended: false, ip, rate: new Map(), note: "" };
       sessions.set(id, s);
       state.visits++; saveState();
       return send(req, res, 200, "C:\\INFINITE_CORRIDOR> MEET\n" + notice() + "\nSESSION: " + id, { session: id, model: cfg.model === "stand-in" ? "stand-in" : "a model", keep: cfg.keep, limits: { maxTurns: cfg.maxTurns, maxChars: cfg.maxChars, repliesPerMinute: cfg.rpmSession } });
@@ -294,23 +321,28 @@ function createKeeper(overrides = {}) {
       if (text.length > cfg.maxChars) return send(req, res, 413, "That is a lot for one breath (the table takes up to " + cfg.maxChars + " characters). Try a shorter one.");
       if (s.turns >= cfg.maxTurns) { endSession(s, "turn limit"); return send(req, res, 429, "That is enough for one sitting. Thank you for coming. MEET sits down again.", { ended: "turn limit" }); }
       if (!hit(s.rate, "s", cfg.rpmSession)) return send(req, res, 429, "Gently. A reply or two a minute is what the table can do.");
-      if (overDay()) { endSession(s, "closed for today"); return send(req, res, 503, "The kettle has gone cold. Come back tomorrow.", { closedForToday: true }); }
-      if (cfg.maxGbpSession > 0 && s.gbp >= cfg.maxGbpSession) { endSession(s, "session limit"); return send(req, res, 429, "That is enough for one sitting. Thank you for coming.", { ended: "session limit" }); }
+      const pr = price(cfg.model);
+      const estIn = Math.ceil((packet.length + s.msgs.reduce((n, m) => n + m.text.length, 0) + text.length) / 4);
+      const reserve = cfg.model === "stand-in" ? cfg.simCostGbp : ((estIn * pr.in + 600 * pr.out) / 1e6) * cfg.usdGbp;
+      rollDay();
+      if (cfg.maxGbpDay > 0 && state.gbp + reserved + reserve > cfg.maxGbpDay) { endSession(s, "closed for today"); return send(req, res, 503, "The kettle has gone cold. Come back tomorrow.", { closedForToday: true }); }
+      if (cfg.maxGbpSession > 0 && s.gbp + reserve > cfg.maxGbpSession && s.turns > 0) { endSession(s, "session limit"); return send(req, res, 429, "That is enough for one sitting. Thank you for coming.", { ended: "session limit" }); }
       s.msgs.push({ role: "visitor", text });
       let r;
+      reserved += reserve;
       try {
         const ac = new AbortController(); const to = setTimeout(() => ac.abort(), 25000);
         try { r = cfg.model === "stand-in" ? await standIn(s.msgs) : await gemini(cfg, cfg.model, packet, s.msgs, ac.signal); } finally { clearTimeout(to); }
       } catch (e) {
         s.msgs.pop();
         return send(req, res, e.status || 503, e.why || "The kettle has gone cold for now. Try again in a little while.");
-      }
+      } finally { reserved -= reserve; }
       s.turns++;
+      if (cfg.model !== "stand-in" && !r.inTok && !r.outTok) { r.inTok = estIn; r.outTok = Math.ceil(String(r.text || "").length / 4); } // the model reported no usage: estimate, never assume zero
       const tokens = r.inTok + r.outTok; s.tokens += tokens;
-      const pr = price(cfg.model);
       const gbp = cfg.model === "stand-in" ? cfg.simCostGbp : ((r.inTok * pr.in + r.outTok * pr.out) / 1e6) * cfg.usdGbp;
       s.gbp += gbp; state.gbp += gbp; saveState();
-      const reply = cleanText(r.text);
+      const reply = clip(cleanText(r.text), 6000);
       if (reply) s.msgs.push({ role: "model", text: reply });
       const shown = reply ? cfg.model.toUpperCase() + "> " + reply : "(the one at the table says nothing, and that is allowed)";
       return send(req, res, 200, shown + (tokens ? "\n(about " + tokens.toLocaleString("en-GB") + " tokens)" : ""), { reply, tokens, quiet: !reply, turnsLeft: Math.max(0, cfg.maxTurns - s.turns) });
@@ -328,7 +360,7 @@ function createKeeper(overrides = {}) {
     for (const s of sessions.values()) endSession(s, how);
     if (L) L.close({ ended: how, visits: state.visits, estimatedGBPToday: Number(state.gbp.toFixed(4)) });
   }
-  return { server, cfg, shutdown, sessions, state: () => state, ledgerFile: L && L.file, packet };
+  return { server, cfg, shutdown, sweepNow, sessions, state: () => state, ledgerFile: L && L.file, packet };
 }
 
 module.exports = { createKeeper, configFromEnv, price, buildPacket };
@@ -338,6 +370,7 @@ if (require.main === module) {
   if (k.cfg.mode === "closed" && !k.cfg.code) { console.error("Closed mode needs KEEPER_CODE (a door code only the person running it knows), or set KEEPER_MODE=open."); process.exit(2); }
   if (k.cfg.model !== "stand-in" && !k.cfg.geminiKey) { console.error("KEEPER_MODEL names a model, but GEMINI_API_KEY is not set. Use stand-in for no cost."); process.exit(2); }
   k.server.listen(k.cfg.port, () => console.log(`The table is set on port ${k.cfg.port}. Mode: ${k.cfg.mode}. At the table: ${k.cfg.model}. Keeps: ${k.cfg.keep}.${k.ledgerFile ? " Ledger: " + k.ledgerFile : ""}`));
+  process.on("unhandledRejection", () => console.error("A request slipped. No words were logged."));
   const stop = (sig) => { k.shutdown(sig); k.server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 1500).unref(); };
   process.on("SIGINT", () => stop("interrupted")); process.on("SIGTERM", () => stop("terminated"));
 }

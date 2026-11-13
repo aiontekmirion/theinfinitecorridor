@@ -58,7 +58,7 @@ const stop = (x) => new Promise((r) => { x.k.shutdown("test"); x.k.server.close(
   await stop(x);
 
   // 3. nothing is kept unless offered; privacy takes it back; the ledger shows counts, not words
-  x = await start();
+  x = await start({ maxPerIp: 10 });
   const ids = [];
   for (let i = 0; i < 3; i++) { r = await call(x.base, "GET", "/meet"); ids.push(sid(r.text)); await call(x.base, "GET", "/say?session=" + ids[i] + "&text=" + encodeURIComponent("word-" + i + " is a secret-ish thing")); }
   await call(x.base, "GET", "/leave?session=" + ids[0]);                                  // not offered
@@ -96,9 +96,10 @@ const stop = (x) => new Promise((r) => { x.k.shutdown("test"); x.k.server.close(
 
   x = await start({ maxGbpDay: 0.025, simCostGbp: 0.01, rpmSession: 100, rpmIp: 1000, maxGbpSession: 1 });
   id2 = sid((await call(x.base, "GET", "/meet")).text);
-  for (let i = 0; i < 3; i++) await call(x.base, "GET", "/say?session=" + id2 + "&text=t" + i);
-  r = await call(x.base, "GET", "/say?session=" + id2 + "&text=more");
-  assert.equal(r.status, 503); assert(/kettle has gone cold/.test(r.text)); assert(!/0\.0|£|pound/i.test(r.text)); ok("the daily ceiling closes the table and never says how much it is");
+  const said = [];
+  for (let i = 0; i < 4; i++) said.push(await call(x.base, "GET", "/say?session=" + id2 + "&text=t" + i));
+  r = said.find((q) => q.status === 503);
+  assert(r, "the ceiling should have closed the table"); assert(/kettle has gone cold/.test(r.text)); assert(!/0\.0|£|pound/i.test(r.text)); ok("the daily ceiling closes the table and never says how much it is");
   r = await call(x.base, "GET", "/meet"); assert.equal(r.status, 503); assert(!/0\.025|£/.test(r.text)); ok("a new visitor is told the kettle is cold, with no figure"); await stop(x);
 
   x = await start({ maxSessions: 2, rpmIp: 1000 });
