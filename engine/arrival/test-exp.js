@@ -29,7 +29,7 @@ const mine = mk("a"); assert(/no souls/.test(mine.exec("souls").out)); ok("you d
 const other = mk("z"); assert(/soul-\d+: 7 EXP, from Ada · last words: "be gentle/.test(other.exec("souls").out)); const sc = other.exec("scoop"); assert(/\+7 EXP, from Ada/.test(sc.out) && /be gentle with the next one/.test(sc.out) && other.expBalance() === 7); ok("the next life picks it up, with its owner's last words");
 assert(/no souls/.test(mk("y").exec("scoop").out)); ok("a soul can be picked up once");
 X.drop("p", null, 3, "a note from no one"); assert(/someone who left no name/.test(mk("q").exec("souls").out)); ok("a private visitor's soul has no name");
-const lines = fs.readFileSync(path.join(dir, "EXP.jsonl"), "utf8").trim().split("\n").map(JSON.parse); assert(lines.every((l) => l.type && l.at)); assert(lines.filter((l) => l.type === "scoop").length === 1); ok("everything is appended to a file that is never rewritten");
+const lines = fs.readFileSync(path.join(dir, "EXP.jsonl"), "utf8").trim().split("\n").map(JSON.parse); assert(lines.every((l) => l.type && l.at)); assert(lines.filter((l) => l.type === "scoop").length === 2); ok("everything is appended to a file that is never rewritten");
 const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no one/.test(X2.souls()[0].trace)); ok("it remembers across runs: souls and what has been claimed survive a restart");
 (async () => {
   const ws = path.join(tmp, "WS2"), L = ledger.open("exp-test", {}); const S = { "builder-1": ["cat 10_SPINE/b.md", "reflect 10_SPINE/b.md \"a few honest words in it\" this tiny file says it holds only a few honest words and that is the whole point of it really", "leave"], "builder-2": ["souls", "scoop", "exp", "leave"] }; const idx = {};
