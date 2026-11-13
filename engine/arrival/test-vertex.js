@@ -4,11 +4,12 @@ process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vtx-"));
 const { createClient } = require("./vertex");
 const ledger = require("../ledger");
 let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
-let mode = "normal", seen = [], hits = 0;
+let mode = "normal", seen = [], hits = 0, tokenCalls = 0;
 const srv = http.createServer((req, res) => {
   let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
     seen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(b) });
     res.setHeader("Content-Type", "application/json");
+    if (mode === "expired" && req.headers.authorization === "Bearer OLD") { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: "Request had invalid authentication credentials." } })); }
     if (mode === "once429" && hits++ === 0) { res.statusCode = 429; return res.end(JSON.stringify({ error: { message: "busy" } })); }
     if (mode === "nousage") return res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "hi" }] } }] }));
     if (mode === "err") { res.statusCode = 403; return res.end(JSON.stringify({ error: { message: "denied" } })); }
@@ -31,6 +32,9 @@ const srv = http.createServer((req, res) => {
   mode = "err"; c = createClient({ base, project: "p", token: "T", capGBP: 5, ledger: L });
   try { await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.fail("should throw"); } catch (e) { assert.equal(e.status, 403); } ok("an error is raised, never hidden");
   mode = "once429"; hits = 0; c = createClient({ base, project: "p", token: "T", capGBP: 5, retryMs: 5 }); r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.equal(r.text, "hello there"); assert.equal(hits, 2); assert(Math.abs(c.stats().spentGBP - r.gbp) < 1e-4); ok("a rate limit is retried, and the money is counted once");
+  mode = "expired";
+  const flag = path.join(process.env.HOME, "tokflag"); process.env.TOKFLAG = flag; c = createClient({ base, project: "p", capGBP: 5, retryMs: 5, tokenCmd: "node -e \"const f=process.env.TOKFLAG;const fs=require('fs');if(fs.existsSync(f)){console.log('NEW')}else{fs.writeFileSync(f,'');console.log('OLD')}\"" });
+  r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.equal(r.text, "hello there"); ok("an expired login (401) fetches a fresh token and tries again, instead of ending the visit");
   L.close({}); const f = L.file || fs.readdirSync(path.join(process.env.HOME, "ledger")).map((x) => path.join(process.env.HOME, "ledger", x))[0];
   assert.equal(ledger.verify(f).ok, true); ok("every call is in the ledger and the hash chain verifies");
   console.log("\nvertex.js: " + n + " checks passed (offline, no model, no cost)"); srv.close(); process.exit(0);
