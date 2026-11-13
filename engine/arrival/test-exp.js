@@ -65,5 +65,14 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
     assert(/that one is yours, so it earns you nothing/.test(a.exec('reflect /workshop/mine.txt "my own manifesto, which says a number of true things" ' + MINE).out) && a.expBalance() === 5); ok("your own writing earns you nothing, said kindly, with what to do instead");
     assert(/no such file in \/workshop/.test(a.exec("reflect /workshop/nothing.txt hello there friend of mine and more words besides").out) && /try 'ls \/'/.test(createShell(rootR, { workshop: wsR, exp: XR, id: "z" }).exec("reflect /nope.md x y z").out)); ok("a missing file says where to look, in the record or in /workshop");
   }
+  // a gate that only repeats itself traps a visitor (one spent 99 of its 120 turns on it): the refusal now teaches
+  {
+    const wsT = path.join(tmp, "WS-T2"); const XT = createExp({ dir: wsT }); const st = createShell(root, { workshop: wsT, exp: XT, id: "trap", by: () => "trap" });
+    st.exec("cat 10_SPINE/a.md"); const bad = 'reflect 10_SPINE/a.md "an old word for a lifetime and for a child at play" ' + MINE;
+    const m1 = st.exec(bad).out; assert(/not in the welcome/.test(m1) && !/Here is a line/.test(m1)); ok("the first miss says what the rule wants, and that the line must be in the file, not the welcome");
+    const m2 = st.exec(bad).out; assert(/Here is a line from this file you can quote exactly: "/.test(m2)); const offered = m2.match(/quote exactly: "([^"]+)"/)[1]; ok("the second miss offers a real line from the file to quote");
+    st.exec(bad); const m4 = st.exec(bad).out; assert(/it may not be you/.test(m4) && /tell ask/.test(m4)); ok("the fourth tells them it may not be them, and that they can ask us");
+    const good = st.exec('reflect 10_SPINE/a.md "' + offered + '" ' + MINE); assert(/reflected\. \+/.test(good.out), good.out); ok("and the offered line really works, so nobody is led in a circle");
+  }
   console.log("\nexp: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

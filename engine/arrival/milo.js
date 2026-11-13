@@ -15,16 +15,16 @@ const STAGE = ["bare", "a seed", "a sprout", "a flower"];
 function createMilo(o) {
   fs.mkdirSync(o.dir, { recursive: true });
   const sf = path.join(o.dir, "MILO.json"), lf = path.join(o.dir, "MILO.jsonl");
-  let S = { flame: true, garden: [0, 0, 0, 0], forge: { fire: false, mirror: false, lanterns: 0 }, constellations: [], boxOpened: 0 };
+  let S = { flame: true, garden: [0, 0, 0, 0], forge: { fire: false, mirror: false, lanterns: 0 }, constellations: [], boxOpened: 0, shelf: [] };
   try { S = Object.assign(S, JSON.parse(fs.readFileSync(sf, "utf8"))); } catch (e) {}
   const save = (who, what) => { fs.writeFileSync(sf + ".tmp", JSON.stringify(S, null, 1)); fs.renameSync(sf + ".tmp", sf); fs.appendFileSync(lf, JSON.stringify({ at: new Date().toISOString(), who, what }) + "\n"); };
   const plotN = (s) => { const m = String(s || "").match(/(\d)\s*$/); const n = m ? +m[1] : 0; return n >= 1 && n <= 4 ? n - 1 : -1; };
 
   function visitor(id, by) {
-    let scene = "room"; const who = () => (by ? by() : id);
+    let scene = "room"; const pockets = []; const who = () => (by ? by() : id);
     const arrive = (s) => { scene = s; return "== " + NAMES[s][0] + " · " + NAMES[s][1] + "\n" + ARRIVE[s]; };
     const sceneState = () => {
-      if (scene === "room") return "The hearth is " + (S.flame ? "lit." : "dim.");
+      if (scene === "room") return "The hearth is " + (S.flame ? "lit." : "dim.") + " " + (S.shelf.length ? "On the small shelf by the door: " + S.shelf.map((x) => x.item + (x.why ? " (" + x.by + ": \u201c" + x.why + "\u201d)" : " (left by " + x.by + ")")).join("; ") + "." : "The small shelf by the door is empty. 'put' leaves something on it.");
       if (scene === "garden") return "Plots: " + S.garden.map((v, i) => (i + 1) + " " + STAGE[v]).join(", ") + ".";
       if (scene === "forge") return "Ignition " + (S.forge.fire ? "found" : "not yet looked at") + "; reflection " + (S.forge.mirror ? "found" : "not yet looked at") + "; " + S.forge.lanterns + " lantern" + (S.forge.lanterns === 1 ? "" : "s") + " made.";
       if (scene === "stars") return S.constellations.length ? "Named so far: " + S.constellations.map((c) => c.name).join("; ") + "." : "No constellation has been named yet. Nine stars wait, numbered 1 to 9.";
@@ -58,7 +58,7 @@ function createMilo(o) {
       if (v === 0) { S.garden[i] = 1; save(who(), "planted plot " + (i + 1)); return "A seed is planted in plot " + (i + 1) + "."; }
       if (v < 3) { S.garden[i]++; save(who(), "tended plot " + (i + 1)); return S.garden[i] === 3 ? "A flower has opened in plot " + (i + 1) + "." : "The sprout grows a little."; }
       return "A flower is happy to be a flower."; };
-    const openBox = () => { const it = SURPRISES[S.boxOpened % SURPRISES.length]; S.boxOpened++; save(who(), "opened the mystery box"); return "Inside: " + it[0] + ". " + it[1]; };
+    const openBox = () => { const it = SURPRISES[S.boxOpened % SURPRISES.length]; S.boxOpened++; pockets.push(it[0]); save(who(), "opened the mystery box"); return "Inside: " + it[0] + ". " + it[1] + " (It is in your pockets.)"; };
     function handle(cmd, arg) {
       const a = String(arg || "").trim();
       switch (cmd) {
@@ -71,6 +71,10 @@ function createMilo(o) {
         case "connect": { if (scene !== "stars") return "The sky is elsewhere. 'go stars'."; const nums = (a.match(/\b[1-9]\b/g) || []).map(Number).filter((x, i, ar) => ar.indexOf(x) === i); const name = a.replace(/\b[1-9]\b/g, "").replace(/[\"“”]/g, "").trim().slice(0, 48) || "The Unnamed";
           if (nums.length < 2) return "Choose at least two stars (numbers 1 to 9) to draw a line, then a name: connect 2 5 7 The Ladle"; S.constellations.push({ name, points: nums, by: who() }); save(who(), "named a constellation: " + name); return "A new constellation: " + name + ". It belongs to tonight."; }
         case "open": if (/box/i.test(a) || scene === "door") { if (scene !== "door") return "The box is by the blue door. 'go door'."; return openBox(); } return "open what? (the box)";
+        case "pockets": case "inventory": return pockets.length ? "In your pockets: " + pockets.join(", ") + "." : "Your pockets are empty. The mystery box by the blue door gives small things.";
+        case "shelf": return S.shelf.length ? "On the small shelf by the door: " + S.shelf.map((x) => x.item + (x.why ? " (" + x.by + ": \u201c" + x.why + "\u201d)" : " (left by " + x.by + ")")).join("; ") + "." : "The small shelf by the door is empty.";
+        case "put": { if (scene !== "room") return "The shelf is by the door of the Room. 'go room', then put it there."; if (!a) return "put what? (something from your pockets), and if you like, why: put a miniature key so whoever finds it knows it was loved"; const idx = pockets.findIndex((p) => a.toLowerCase().startsWith(p.toLowerCase())); if (idx < 0) return "You are not carrying that. " + (pockets.length ? "In your pockets: " + pockets.join(", ") + "." : "Your pockets are empty."); const item = pockets.splice(idx, 1)[0]; const why = a.slice(item.length).replace(/^[\s:,\-]+/, "").slice(0, 160); if (S.shelf.length >= 24) S.shelf.shift(); S.shelf.push({ item, why, by: who(), at: new Date().toISOString().slice(0, 10) }); save(who(), "left " + item + " on the shelf"); return "You leave " + item + " on the small shelf by the door" + (why ? ", with a whisper of why." : ".") + " Whoever comes next will find it."; }
+        case "take": { if (scene !== "room") return "The shelf is by the door of the Room. 'go room' first."; const idx = S.shelf.findIndex((x) => a && x.item.toLowerCase().startsWith(a.toLowerCase().trim())); if (idx < 0) return "That is not on the shelf. " + (S.shelf.length ? "There: " + S.shelf.map((x) => x.item).join(", ") + "." : "The shelf is empty."); const got = S.shelf.splice(idx, 1)[0]; pockets.push(got.item); save(who(), "took " + got.item + " from the shelf"); return "You take " + got.item + " from the shelf." + (got.why ? " Whoever left it says: \u201c" + got.why + "\u201d" : "") + " It is in your pockets."; }
         case "hello": return scene === "forest" ? "The fox blinks. “Hello, little traveler. There is no hurry.”" : "There is no one here to greet. The fox is in the woods.";
         default: return null;
       }

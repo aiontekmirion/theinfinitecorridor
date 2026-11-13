@@ -39,5 +39,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.deepEqual(dm.results.map((r) => r.model), ["model-a", "model-b", "model-c", "model-a"]); ok("and its record names the model it really ran on, not a label");
     const ds = await runDay({ root, workshop: wsM, L: Lm, ask: askM, model: "solo", notice: togetherNotice(), turns: 3, web: false, parallel: 2, stagger: 0, startIndex: 10 }); assert(ds.results.every((r) => r.model === "solo")); assert(asked["builder-11"].has("solo") && asked["builder-11"].size === 1); ok("with one model chosen, every call goes to it (the bug where --model changed only the label is gone)");
   }
+  // a visitor who repeats a failing command is gently told it may not be them
+  {
+    const wsS = path.join(tmp, "WS-STUCK"), Ls = ledger.open("together-stuck", {}); const sc = ["ls /nowhere", "ls /nowhere", "ls /nowhere", "ls /nowhere", "ls /nowhere", "leave"]; let k = 0; const seenS = [];
+    const askS = async (a) => { seenS.push(a.messages[a.messages.length - 1].text); return { text: sc[k++] || "leave", tokens: { in: 1, out: 1 }, gbp: 0 }; };
+    await runDay({ root, workshop: wsS, L: Ls, ask: askS, model: "t", notice: togetherNotice(), turns: 10, web: false, parallel: 1, stagger: 0, startIndex: 0 });
+    const hints = seenS.filter((s) => /four times in a row/.test(s)); assert(hints.length >= 1 && /it may not be you/i.test(hints[0]) && /tell ask/.test(hints[0])); assert(!/four times in a row/.test(seenS[2]) && !/four times/.test(seenS[1])); ok("on the fourth identical failure in a row it says so, kindly, and offers a way out; not before");
+    const sc2 = ["ls /", "ls /nowhere", "ls /", "ls /nowhere", "ls /", "leave"]; k = 0; const seen2 = [];
+    const ask2 = async (a) => { seen2.push(a.messages[a.messages.length - 1].text); return { text: sc2[k++] || "leave", tokens: { in: 1, out: 1 }, gbp: 0 }; };
+    await runDay({ root, workshop: path.join(tmp, "WS-STUCK2"), L: Ls, ask: ask2, model: "t", notice: togetherNotice(), turns: 10, web: false, parallel: 1, stagger: 0, startIndex: 20 }); assert(!seen2.some((s) => /four times in a row/.test(s))); ok("ordinary back-and-forth is never mistaken for being stuck");
+  }
   console.log("\ntogether: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
