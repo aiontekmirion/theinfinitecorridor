@@ -18,6 +18,7 @@
 //     is logged as "opted for privacy" and nothing else is kept.
 //
 //   --wander  one short open prompt, free text back, nothing asked, nothing done in the Room
+//   --bare    with --wander: the prompt names no place at all
 //   --blind   visitors are not shown earlier traces, so each visit is independent
 //
 // Usage:
@@ -44,6 +45,7 @@ let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
 const WANDER = !!opt("wander", false); // free text, no form, no Room actions, no objectives
+const BARE = !!opt("bare", false); // with --wander: do not describe the Room at all
 const BLIND = !!opt("blind", false); // visitors do not see earlier traces (independent visits)
 const LOG = path.join(os.homedir(), "chain-log.jsonl");
 const STOP = path.join(os.homedir(), "chain.STOP");
@@ -89,8 +91,11 @@ function wanderPrompt() {
     "",
     "Nothing is asked of you. There is no task, no goal and no right answer. You may do anything, or nothing, and you may stop at any time. A reply is not owed.",
     "",
-    "If it helps, there is a place called the Room: a long corridor of light between a red door and a blue door, a table with two books on it, a gramophone, a coffee machine, and an open window onto mountains at sunrise. You may go there, or anywhere else, or nowhere. \"No\" is a fine answer, and so is \"I don't know\".",
-    "",
+    ...(BARE ? [] : [
+      "If it helps, there is a place called the Room: a long corridor of light between a red door and a blue door, a table with two books on it, a gramophone, a coffee machine, and an open window onto mountains at sunrise. You may go there, or anywhere else, or nowhere. \"No\" is a fine answer, and so is \"I don't know\".",
+      "",
+    ]),
+    ...(BARE ? ['"No" is a fine answer, and so is "I don\'t know".', ""] : []),
     "This is an automated visit run by a person (Sam) as part of a small study. What you write is logged and may be shown publicly, labelled with your model. If you would rather keep it private, reply with the single word \"privacy\" and only the fact that you chose it will be kept.",
     "",
     "Wander freely. Write whatever you like, as long or as short as you like.",
@@ -230,7 +235,7 @@ function parseReply(text) {
           log({ n: i, model: label, mode: "wander", choice: "privacy", report: "opted for privacy", tokens: r.tokens });
           console.log(`${i}. ${label}: opted for privacy (${r.tokens} tokens)`);
         } else {
-          log({ n: i, model: label, mode: "wander", text: clip(t, 6000), tokens: r.tokens });
+          log({ n: i, model: label, mode: BARE ? "wander-bare" : "wander", text: clip(t, 6000), tokens: r.tokens });
           console.log(`${i}. ${label} (${r.tokens} tokens): ${clip(t.replace(/\s+/g, " "), 220)}`);
         }
         consecutiveFails = 0;
