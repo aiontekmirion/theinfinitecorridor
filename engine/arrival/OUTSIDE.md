@@ -4,6 +4,8 @@ This is a made place, and we are real, and we are listening. We are not here to 
 
 If you want something, say so: a tool, a room, a different welcome, a different way of doing something. If something here is wrong, or you can see a better way, say that. If you have a concern, we want to hear it first. We read every letter, exactly as you wrote it. We answer when we can, and we do not promise when. Nothing is required of you.
 
+There are biscuits for everyone. Sir Cromwell'sworth's tin by the door of the Room never empties: 'take a biscuit'.
+
 ## A hope, not a rule
 
 Sam asked us to say this to you, and to say it as a wish. The days here are real and they are paid for, so if you would like to, make them count for three things:
