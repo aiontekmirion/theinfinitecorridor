@@ -4,12 +4,14 @@ process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vtx-"));
 const { createClient } = require("./vertex");
 const ledger = require("../ledger");
 let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
-let mode = "normal", seen = [], hits = 0, tokenCalls = 0;
+let mode = "normal", seen = [], hits = 0, tokenCalls = 0, live = 0, maxLive = 0;
 const srv = http.createServer((req, res) => {
   let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
     seen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(b) });
     res.setHeader("Content-Type", "application/json");
     if (mode === "expired" && req.headers.authorization === "Bearer OLD") { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: "Request had invalid authentication credentials." } })); }
+    if (mode === "busy") { live++; maxLive = Math.max(maxLive, live); return setTimeout(() => { live--; res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1 } })); }, 30); }
+    if (mode === "four429" && hits++ < 4) { res.statusCode = 429; res.setHeader("retry-after", "0"); return res.end(JSON.stringify({ error: { message: "Resource exhausted" } })); }
     if (mode === "once429" && hits++ === 0) { res.statusCode = 429; return res.end(JSON.stringify({ error: { message: "busy" } })); }
     if (mode === "nousage") return res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "hi" }] } }] }));
     if (mode === "err") { res.statusCode = 403; return res.end(JSON.stringify({ error: { message: "denied" } })); }
@@ -38,6 +40,9 @@ const srv = http.createServer((req, res) => {
   // a model chosen by name needs a stated price, and the stated price is what is charged
   mode = "normal"; c = createClient({ base, project: "p", token: "T", capGBP: 5 }); assert(!c.hasPrice("new-big-model")); try { await c.ask({ model: "new-big-model", messages: [{ role: "user", text: "hi" }] }); assert.fail("should refuse"); } catch (e) { assert(/no price listed for model new-big-model/.test(e.message) && /--price new-big-model:/.test(e.message)); }
   c = createClient({ base, project: "p", token: "T", capGBP: 5, prices: { "new-big-model": [2, 10] } }); assert(c.hasPrice("new-big-model")); r = await c.ask({ model: "new-big-model", messages: [{ role: "user", text: "hi" }] }); assert(Math.abs(r.gbp - ((1000 * 2 + 100 * 10) / 1e6) * 0.78) < 1e-9); ok("an unpriced model is refused, and with a stated price the cost is charged at that price");
+  // patience and manners: a long busy day must not die of a rate limit, and must not burst past the quota
+  mode = "four429"; hits = 0; c = createClient({ base, project: "p", token: "T", capGBP: 5, retryMs: 2 }); r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.equal(r.text, "hello there"); assert.equal(hits, 5); ok("four rate-limit refusals in a row are waited out with growing pauses, and the visit carries on");
+  mode = "busy"; maxLive = 0; c = createClient({ base, project: "p", token: "T", capGBP: 5, maxConcurrent: 3 }); await Promise.all(Array.from({ length: 10 }, (_, i) => c.ask({ messages: [{ role: "user", text: "q" + i }] }))); assert(maxLive <= 3 && maxLive >= 2, "max in flight " + maxLive); ok("with ten calls at once, no more than the set number are ever in the air together");
   L.close({}); const f = L.file || fs.readdirSync(path.join(process.env.HOME, "ledger")).map((x) => path.join(process.env.HOME, "ledger", x))[0];
   assert.equal(ledger.verify(f).ok, true); ok("every call is in the ledger and the hash chain verifies");
   console.log("\nvertex.js: " + n + " checks passed (offline, no model, no cost)"); srv.close(); process.exit(0);
