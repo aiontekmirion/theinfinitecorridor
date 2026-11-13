@@ -21,7 +21,7 @@ function createClient(opts) {
     capGBP: 26, project: process.env.GOOGLE_CLOUD_PROJECT || "",
     base: "https://aiplatform.googleapis.com",
     tokenCmd: "gcloud auth print-access-token",
-    ledger: null, maxOutputTokens: 1024, charsPerToken: 3.5,
+    ledger: null, maxOutputTokens: 1024, charsPerToken: 3.5, retryMs: 2500,
   }, opts || {});
   let spent = 0, reserved = 0, calls = 0, refused = 0, tokenCache = { t: "", at: 0 };
 
@@ -59,8 +59,13 @@ function createClient(opts) {
       };
       if (a.system) body.systemInstruction = { parts: [{ text: a.system }] };
       const url = o.base + "/v1/projects/" + o.project + "/locations/global/publishers/google/models/" + model + ":generateContent";
-      r = await post(url, body, { Authorization: "Bearer " + token() });
-      if (r.status === 400 && /thinking/i.test(r.text)) { delete body.generationConfig.thinkingConfig; r = await post(url, body, { Authorization: "Bearer " + token() }); }
+      const go = () => post(url, body, { Authorization: "Bearer " + token() });
+      for (let attempt = 0; ; attempt++) {          // rate limits and busy servers are retried, a few times, with a pause; the money is counted once
+        try { r = await go(); } catch (e) { if (attempt >= 2) throw e; await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
+        if (r.status === 400 && /thinking/i.test(r.text) && body.generationConfig.thinkingConfig) { delete body.generationConfig.thinkingConfig; continue; }
+        if ((r.status === 429 || r.status >= 500) && attempt < 2) { await new Promise((z) => setTimeout(z, o.retryMs * (attempt + 1))); continue; }
+        break;
+      }
     } finally { reserved -= worst; }
     let j; try { j = JSON.parse(r.text); } catch (e) { j = {}; }
     const u = j.usageMetadata || {};
