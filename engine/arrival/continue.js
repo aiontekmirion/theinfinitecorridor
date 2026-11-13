@@ -25,10 +25,16 @@ function seed() {                                  // a small menu of unfinished
   const f = path.join(__dirname, "UNFINISHED-IDEAS.md");
   if (!fs.existsSync(seedFile) && fs.existsSync(f)) { fs.copyFileSync(f, seedFile); fs.writeFileSync(seedFile + ".by", JSON.stringify({ by: "Claude (seed, from the record)", at: new Date().toISOString() })); }
 }
+function publishVillage() {                      // one building site: everything built goes to the village page
+  const site = path.join(home, "site-work"), live = fs.existsSync(path.join(site, ".git")), out = live ? path.join(site, "village") : path.join(home, "village-out");
+  try { const r = require("./publish").build(workshop, out); say("village page rebuilt: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? " (left out for key-like text: " + r.skipped.join(", ") + ")" : "")); } catch (e) { return say("could not build the village page: " + String(e.message).slice(0, 80)); }
+  if (!live) return say("the page is in " + out + ". To publish it to the web, set up ~/site-work once (see CONTINUE.md); until then it is backed up with --push and any Claude can publish it.");
+  try { cp.execSync('git pull -q --rebase origin main && git add village && (git diff --cached --quiet || git commit -qm "village: more has been built") && git push -q origin main', { cwd: site, shell: "/bin/bash", stdio: "ignore" }); say("published: https://aiontekmirion.github.io/village/"); } catch (e) { say("could not push the village page (is ~/site-work signed in to GitHub?). The page is in " + out); }
+}
 function pushBackup() {
   const repo = path.join(home, "room-backups-repo"); if (!fs.existsSync(repo)) return say("no room-backups-repo here; skipping the backup");
   try {
-    cp.execSync("mkdir -p ledger-2026-11-13 workshop-2026-11-13 builders-state && cp " + path.join(home, "ledger") + "/*.jsonl ledger-2026-11-13/ 2>/dev/null; cp -r " + workshop + "/. workshop-2026-11-13/ 2>/dev/null; cp " + stateFile + " builders-state/ 2>/dev/null; true", { cwd: repo, shell: "/bin/bash" });
+    cp.execSync("mkdir -p ledger-2026-11-13 workshop-2026-11-13 builders-state && cp " + path.join(home, "ledger") + "/*.jsonl ledger-2026-11-13/ 2>/dev/null; cp -r " + workshop + "/. workshop-2026-11-13/ 2>/dev/null; [ -d " + path.join(home, "village-out") + " ] && mkdir -p village-out && cp -r " + path.join(home, "village-out") + "/. village-out/ 2>/dev/null; cp " + stateFile + " builders-state/ 2>/dev/null; true", { cwd: repo, shell: "/bin/bash" });
     const bad = cp.spawnSync("bash", ["-c", 'grep -rIlE "AIza[0-9A-Za-z_-]{30,}|AQ\\.[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{20,}|github_pat_" ledger-2026-11-13 workshop-2026-11-13 builders-state | head -3'], { cwd: repo, encoding: "utf8" }).stdout.trim();
     if (bad) return say("STOP: key-like text found in " + bad.split("\n")[0] + ". Nothing pushed.");
     cp.execSync('git add -A && (git diff --cached --quiet || git commit -qm "Builders: state, ledger and workshop") && git push -q origin main', { cwd: repo, shell: "/bin/bash", stdio: "ignore" }); say("backed up to the private repo");
@@ -51,7 +57,7 @@ async function main() {
       let bad = 0; for (const r of day.results) { S.visits++; S.spentGBP += r.costGBP || 0; if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; bad++; } S.history.push({ id: r.id, end: r.end, turns: r.turns, gbp: r.costGBP, private: !!r.private, built: (r.built || []).length, at: new Date().toISOString() }); say(r.id + ": " + r.end + ", " + r.turns + " turns, £" + (r.costGBP || 0).toFixed(4) + (r.private ? ", private" : ", built " + (r.built || []).length)); }
       S.history = S.history.slice(-200); save(S); say("a day with " + day.results.length + " builders at once is done [total £" + S.spentGBP.toFixed(2) + "]"); day.notesForSam.forEach((n) => say("A NOTE FOR YOU from " + n.by + ": " + n.file));
       if (day.results.some((r) => r.end === "ceiling")) { say("the ceiling was reached"); break; } consecutiveErrors = bad === day.results.length ? consecutiveErrors + 1 : 0; if (consecutiveErrors >= 4) { say("four bad days in a row; stopping. Run the same command to resume."); break; }
-      if (has("push")) pushBackup(); if (pause > 0) await sleep(pause * 1000); continue;
+      if (has("publish")) publishVillage(); if (has("push")) pushBackup(); if (pause > 0) await sleep(pause * 1000); continue;
     }
     const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
     let r; try { r = await visit({ id, root, turns, model, ask, L, notice: nt, noticeName: notice, workshop, web: !has("no-web"), maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
@@ -61,10 +67,10 @@ async function main() {
     say(id + ": " + r.end + ", " + r.turns + " turns, £" + (r.costGBP || 0).toFixed(4) + (r.private ? ", private" : ", built " + (r.built || []).length) + "   [total £" + S.spentGBP.toFixed(2) + "]");
     if (/ceiling/.test(r.end)) { say("the ceiling was reached"); break; }
     if (consecutiveErrors >= 4) { say("four errors in a row; stopping so nothing runs wild. Run the same command again to resume."); break; }
-    if (has("push") && S.visits % pushEvery === 0) pushBackup();
+    if (has("publish")) publishVillage(); if (has("push") && S.visits % pushEvery === 0) pushBackup();
     if (pause > 0) await sleep(pause * 1000);
   }
-  L.close({ costGBP: S.spentGBP }); save(S); if (has("push")) pushBackup();
+  L.close({ costGBP: S.spentGBP }); save(S); if (has("publish")) publishVillage(); if (has("push")) pushBackup();
   say("done for now: " + S.visits + " visits, £" + S.spentGBP.toFixed(2) + ", " + S.built + " things built, " + S.privateCount + " private. Run the same command to resume.");
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
