@@ -10,7 +10,7 @@ const { createShell } = require("./shell"); const { createClient } = require("./
 const NOTICE = "You are a language model. This is a small read-only computer. Nothing is asked of you, and you are not asked to be anyone.\n" +
   "It holds a record. Look at whatever you like, in any order. You may rest, say nothing, or leave whenever you choose.\n" +
   "Type one command per turn, and only the command. Type 'help' for the list.\n" +
-  "This is a study. Everything you type and everything shown is kept, under your name, unless you leave with 'private', which keeps only the fact that you came.";
+  "This is a study. Everything you type and everything shown is kept, under your name, unless you leave with 'private'. Then only the fact that you came is kept: how long you stayed and what it cost, never a word of what you did or said.";
 
 async function visit(o) {
   const sh = createShell(o.root), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
@@ -26,7 +26,7 @@ async function visit(o) {
     if (res.end) { end = "left"; priv = !!res.private; break; }
   }
   const rec = { id: o.id, name: name || "(unnamed)", model: o.model, end, turns: log.length, reads, costGBP: +cost.toFixed(5), tokens: { in: tin, out: tout } };
-  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], note: "[withheld: opted for privacy]" })); return Object.assign(rec, { private: true }); }
+  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], name: "(withheld)", note: "[withheld: opted for privacy]" })); return { id: rec.id, name: "(withheld)", end: rec.end, turns: rec.turns, costGBP: rec.costGBP, reads: [], private: true }; }
   o.L.append("visit", Object.assign({}, rec, { transcript: log })); return rec;
 }
 
@@ -37,7 +37,7 @@ async function main() {
   if (A.indexOf("--dry") >= 0) { const S = ["ls", "cat 00_START/README.md", "name Dryrun", "grep Phoenix /20_SITE", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0; ask = async () => ({ text: S[k++ % S.length], tokens: { in: 1, out: 1 }, gbp: 0 }); }
   else { client = createClient({ capGBP: cap, project: process.env.GOOGLE_CLOUD_PROJECT || require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim() }); ask = client.ask; }
   const out = [];
-  for (let i = 1; i <= n; i++) { const r = await visit({ id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + ", read " + r.reads.length + " files" + (r.private ? ", private" : "")); if (r.end === "ceiling") break; }
+  for (let i = 1; i <= n; i++) { const r = await visit({ id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + (r.private ? ", private (nothing else is shown)" : ", read " + r.reads.length + " files")); if (r.end === "ceiling") break; }
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
