@@ -350,6 +350,52 @@ function apply(v, j) {
   let msg = "", ok = true;
   const cap = v.stage >= 2 ? 6 : 3;
   switch (a) {
+    case "build_for": {
+      const to=String(j.to||"all").trim().toUpperCase();
+      const recipient=to==="ALL"?null:byId(to),target=to==="ALL"?"all":recipient?.id;
+      const format=String(j.format||"").trim().toLowerCase();
+      const kind=String(j.kind||"other").trim().toLowerCase();
+      const title=clip(String(j.title||"").trim(),80);
+      const description=clip(String(j.description||"").trim(),240);
+      const content=String(j.content||"");
+      if(!target || (recipient && (!recipient.active||recipient===v))){
+        ok=false;msg="Choose an active other visitor, or all.";break;
+      }
+      if(!FORMATS.has(format)||!KINDS.has(kind)||!title||!content.trim()||content.length>6500){
+        ok=false;msg="Need valid format, kind, title and 1–6500 characters of complete source.";break;
+      }
+      if(works.length>=60){ok=false;msg="Workbench full; you may still rest, reflect or leave.";break;}
+      const w=saveCreation(v,{to:target,format,kind,title,description,content});
+      msg=`Built ${w.filename}: ${title}, offered to ${target}; saved as real text, NEVER executed. They may accept, decline or fork it.`;
+      break;
+    }
+    case "inspect_work": {
+      const w=workById(j.id);
+      if(!w){ok=false;msg="No such work.";break;}
+      v.notes.push("SOURCE "+w.id+" by "+w.from+" for "+w.to+": "+clip(w.content,3400));
+      msg=`Inspected ${w.filename}. Source is copied into your next-turn notebook.`;
+      break;
+    }
+    case "respond_work": {
+      const w=workById(j.id),choice=String(j.choice||"").toLowerCase().trim();
+      if(!w||(w.to!==v.id&&w.to!=="all")||!["accept","decline"].includes(choice)){
+        ok=false;msg="Only a recipient can accept or decline a work.";break;
+      }
+      w.feedback.push({from:v.id,choice,text:clip(String(j.text||"").trim(),220)});
+      if(w.to===v.id)w.status=choice==="accept"?"accepted":"declined";
+      msg=`You ${choice} ${w.id}. You owe nothing.`;break;
+    }
+    case "fork_work": {
+      const parent=workById(j.id);
+      if(!parent){ok=false;msg="Cannot locate original work.";break;}
+      const content=String(j.content||"");
+      if(!content.trim()||content.length>6500){ok=false;msg="Fork requires 1–6500 characters of complete source.";break;}
+      if(works.length>=60){ok=false;msg="Workbench full.";break;}
+      const w=saveCreation(v,{parent:parent.id,to:"all",kind:parent.kind,format:parent.format,
+        title:clip(String(j.title||"A variation on "+parent.title).trim(),80),
+        description:clip(String(j.description||"A different version of "+parent.id).trim(),240),content});
+      msg=`Built ${w.filename}, independent fork of ${parent.id}; original preserved.`;break;
+    }
     case "observe": {
       const note = clip(String(j.note || "").trim(), 240);
       if (!note) {ok=false;msg="No observation offered.";break;}
@@ -512,6 +558,10 @@ function apply(v, j) {
     case "leave": {
       v.active=false;v.privacy=!!j.privacy;
       if(v.privacy){
+        for(let i=works.length-1;i>=0;i--)if(works[i].from===v.id){
+          try{fs.unlinkSync(path.join(CREATIONS,works[i].filename));}catch(e){}
+          works.splice(i,1);
+        }
         for(let i=board.length-1;i>=0;i--)if(board[i].id===v.id)board.splice(i,1);
         for(let i=library.length-1;i>=0;i--)if(library[i].from===v.id)library.splice(i,1);
         for(let i=experiments.length-1;i>=0;i--)if(experiments[i].from===v.id)experiments.splice(i,1);
@@ -593,7 +643,7 @@ function fakeTurn(v) {
 function flushLog(reason) {
   const lines = [];
   lines.push(JSON.stringify({at:new Date().toISOString(),mode:"village-nourish",event:"run",
-    seed:SEED,n:N,rounds:ROUNDS,size:SIZE,models:FAKE?["stand-in"]:MODELS,
+    seed:SEED,n:N,rounds:ROUNDS,size:SIZE,models:FAKE?["stand-in"]:MODELS,creationsDirectory:CREATIONS,
     ended:reason,maxGBP:MAX_GBP,reservedGBP,apiAttempts:attemptsMade,
     observedInputTokens:billedPromptTokens,observedOutputTokens:billedOutputTokens,
     budgetMeaning:"Conservative client-side reservation, NOT provider-side billing guarantee.",
@@ -614,6 +664,7 @@ function flushLog(reason) {
     library:library.filter(m=>!byId(m.from)?.privacy),
     experiments:experiments.filter(m=>!byId(m.from)?.privacy),
     proposals:proposals.filter(m=>!byId(m.from)?.privacy),
+    works:works.map(({content,...metadata})=>({...metadata,bytes:Buffer.byteLength(content,"utf8")})),
     visitors:visitors.filter(v=>!v.privacy).map(v=>({
       id:v.id,name:v.name,earlierNames:v.names,model:v.model,x:v.x,y:v.y,
       stage:v.stage,trait:v.trait,built:v.built,gathered:v.gathered,
@@ -632,6 +683,8 @@ function summary() {
   console.log(`budget: £${MAX_GBP.toFixed(2)} allowed, £${reservedGBP.toFixed(4)} conservative reservations across ${attemptsMade} API attempts (not an invoice)`);
   console.log("mutation triggers:",visitors.filter(v=>!v.privacy).map(v=>v.id+":"+(v.mutationReady?"ready":"not-ready")+" ["+v.mutations.join(",")+"]").join(" "));
   console.log("actions:", JSON.stringify(act));
+  console.log("REAL TEXT/CODE FILES:",works.length,"in",CREATIONS);
+  for(const w of works)console.log("  "+w.id+" "+w.filename+" | "+w.from+" → "+w.to+" | "+w.title+" | "+w.status+(w.parent?" fork of "+w.parent:""));
   console.log(`houses: ${huts.size}, total level ${lv}${nn ? ", average distance to nearest neighbouring house " + nn : ""}`);
   console.log("stages:", visitors.map((v) => v.id + ":" + v.stage).join(" "));
   console.log("names:", visitors.filter((v) => !v.privacy).map((v) => v.id + "=" + (v.name || "an AION") + (v.names.length ? " (earlier: " + v.names.join(", ") + ")" : "")).join(" | "));
