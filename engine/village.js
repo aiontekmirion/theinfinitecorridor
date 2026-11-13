@@ -34,6 +34,7 @@
 //
 // Usage:
 //   node village.js --fake --n 5 --rounds 15            (no key, no cost)
+//   node village.js --n 20 --rounds 100 --parallel --max-gbp 1.00 --model gemini-3.1-flash-lite,gemini-3-flash-preview
 //   GEMINI_API_KEY=... node village.js --n 5 --rounds 10 --model gemini-3.1-flash-lite,gemini-3-flash-preview
 
 const fs = require("fs");
@@ -52,6 +53,10 @@ const ROUNDS = Number(opt("rounds", 10));
 const SIZE = Math.max(8, Number(opt("size", 12)));
 const MODELS = String(opt("model", "gemini-3.1-flash-lite")).split(",").map((m) => m.trim()).filter(Boolean);
 const MAX_TOKENS = Number(opt("max-tokens", 400000));
+const MAX_GBP = Number(opt("max-gbp", 0)); // stop when the estimated cost reaches this many pounds (0 = off)
+const USD_GBP = Number(opt("usd-gbp", 0.78)); // assumed exchange rate
+const CONCURRENCY = Math.max(1, Number(opt("concurrency", 8))); // with --parallel: at most this many calls in flight
+const PARALLEL = !!opt("parallel", false); // everyone chooses at once each round, then the choices are applied in a random order
 const AION = !!opt("aion", false); // adds the AION framework: naming, naming things, no permission needed, undo without loss
 const FAKE = !!opt("fake", false);
 const SEED = Number(opt("seed", Math.floor(Date.now() % 1e6)));
@@ -341,22 +346,43 @@ function apply(v, j) {
   return { a: a || "none", ok, msg: [msg, ...extra].join(" ") };
 }
 
+// ---- cost estimate ---------------------------------------------------------
+// List prices in US dollars per million tokens, as found on 13 Nov 2026 (output includes thinking tokens).
+// These are estimates; the real figure is the one on the Google Cloud billing report.
+function price(model) {
+  if (/flash-lite/.test(model)) return { in: 0.25, out: 1.5 };
+  if (/3-flash|flash-latest|2\.5-flash/.test(model)) return { in: 0.5, out: 3.0 };
+  return { in: 1.25, out: 10.0 }; // anything else: assume a pro-class price, to be safe
+}
+let costUSD = 0;
+const costGBP = () => costUSD * USD_GBP;
+
 // ---- model call ------------------------------------------------------------
 async function askGemini(model, prompt) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const gen = { responseMimeType: "application/json", maxOutputTokens: 800 };
   if (/flash/.test(model)) gen.thinkingConfig = { thinkingBudget: 0 };
   const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": KEY }, body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-      return { text: parts.map((p) => p.text || "").join(""), tokens: (data.usageMetadata && data.usageMetadata.totalTokenCount) || 0 };
+      const u = data.usageMetadata || {};
+      const inTok = u.promptTokenCount || 0, outTok = (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0);
+      const pr = price(model);
+      costUSD += (inTok * pr.in + outTok * pr.out) / 1e6;
+      return { text: parts.map((p) => p.text || "").join(""), tokens: u.totalTokenCount || inTok + outTok };
     }
     if (res.status === 400 && body.generationConfig.thinkingConfig) { delete body.generationConfig.thinkingConfig; attempt--; continue; }
-    if (attempt <= 1 && (res.status === 429 || res.status >= 500)) { await sleep(8000); continue; }
-    throw new Error("model call failed (" + res.status + ") " + clip((data.error && data.error.message) || res.statusText, 160));
+    if (attempt <= 2 && (res.status === 429 || res.status >= 500)) {
+      const m = JSON.stringify(data).match(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/);
+      await sleep(m ? Math.min(60000, Number(m[1]) * 1000 + 500) : Math.min(60000, 8000 * 2 ** attempt));
+      continue;
+    }
+    const err = new Error("model call failed (" + res.status + ") " + clip((data.error && data.error.message) || res.statusText, 160));
+    err.quota = res.status === 429;
+    throw err;
   }
 }
 function parseReply(text) {
@@ -420,34 +446,84 @@ let ended = "finished";
 process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted. Log written."); process.exit(130); });
 
 (async () => {
-  console.log(`Village${AION ? " (AION framework)" : ""}: ${N} visitor(s), ${ROUNDS} round(s), ${SIZE}x${SIZE}, ${FAKE ? "stand-ins" : MODELS.join(" + ")}, seed ${SEED}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
+  console.log(`Village${AION ? " (AION framework)" : ""}: ${N} visitor(s), ${ROUNDS} round(s), ${SIZE}x${SIZE}, ${FAKE ? "stand-ins" : MODELS.join(" + ")}, seed ${SEED}, ${PARALLEL ? "simultaneous rounds, " : ""}budget ${FAKE ? "n/a" : MAX_GBP ? "about £" + MAX_GBP.toFixed(2) : MAX_TOKENS + " tokens"}`);
   console.log("Stop any time: touch ~/village.STOP");
-  let total = 0, fails = 0;
-  outer: for (let round = 1; round <= ROUNDS; round++) {
-    for (const v of shuffle(visitors)) {
-      if (!v.active) continue;
-      if (fs.existsSync(STOP)) { ended = "kill switch"; console.log("Kill switch found. Stopping."); break outer; }
-      if (!FAKE && total >= MAX_TOKENS) { ended = "token budget"; console.log(`Token budget reached (${total}). Stopping.`); break outer; }
-      let j = null, tokens = 0, err = null;
-      try {
-        if (FAKE) j = fakeTurn(v);
-        else { const r = await askGemini(v.model, turnPrompt(v, round)); tokens = r.tokens; j = parseReply(r.text); }
-        fails = 0;
-      } catch (e) { err = clip(e.message, 200); v.errors++; fails++; }
-      total += tokens; v.tokens += tokens; v.turns++;
-      let res;
-      if (err) res = { a: "error", ok: false, msg: err };
-      else if (!j) res = { a: "unclear", ok: false, msg: "Your reply was not understood, so the turn passed." };
-      else res = apply(v, j);
-      v.events.push(res.msg);
-      v.buf.push({ round, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: j ? clip(JSON.stringify(j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens });
-      if (res.a === "say") board[board.length - 1].round = round;
-      console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${tokens ? " [" + tokens + " tok]" : ""}`);
-      if (fails >= 3) { ended = "errors"; console.log("Three errors in a row. Stopping."); break outer; }
+  let total = 0, fails = 0, turns = 0, bad = 0;
+
+  const exhausted = new Set(); // models that told us they are over quota during this run
+  async function ask(v, prompt) {
+    if (FAKE) return { j: fakeTurn(v), tokens: 0, err: null, model: "stand-in" };
+    let model = exhausted.has(v.model) ? MODELS.find((m) => !exhausted.has(m)) : v.model;
+    if (!model) return { j: null, tokens: 0, err: "every model is over its quota", model: v.model };
+    try {
+      const r = await askGemini(model, prompt);
+      return { j: parseReply(r.text), tokens: r.tokens, err: null, model };
+    } catch (e) {
+      if (e.quota) {
+        exhausted.add(model);
+        console.log(`   (${model} is over its quota; using another model for its turns from now on)`);
+        const alt = MODELS.find((m) => !exhausted.has(m));
+        if (alt) {
+          try { const r = await askGemini(alt, prompt); return { j: parseReply(r.text), tokens: r.tokens, err: null, model: alt }; }
+          catch (e2) { if (e2.quota) exhausted.add(alt); return { j: null, tokens: 0, err: clip(e2.message, 200), model: alt }; }
+        }
+      }
+      return { j: null, tokens: 0, err: clip(e.message, 200), model };
     }
+  }
+  async function pool(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); }
+    }));
+    return out;
+  }
+  function settle(round, v, r) {
+    total += r.tokens; v.tokens += r.tokens; v.turns++; turns++;
+    if (r.err) { v.errors++; fails++; } else fails = 0;
+    let res;
+    if (r.err) res = { a: "error", ok: false, msg: r.err };
+    else if (!r.j) res = { a: "unclear", ok: false, msg: "Your reply was not understood, so the turn passed." };
+    else res = apply(v, r.j);
+    if (res.a === "error" || res.a === "unclear") bad++;
+    v.events.push(res.msg);
+    v.buf.push({ round, usedModel: r.model, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: r.j ? clip(JSON.stringify(r.j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens: r.tokens });
+    if (res.a === "say") board[board.length - 1].round = round;
+    console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : r.model || v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${r.tokens ? " [" + r.tokens + " tok]" : ""}`);
+  }
+  function mustStop() {
+    if (fs.existsSync(STOP)) return "kill switch";
+    if (!FAKE && MAX_GBP && costGBP() >= MAX_GBP) return "cost cap";
+    if (!FAKE && !MAX_GBP && total >= MAX_TOKENS) return "token budget";
+    if (fails >= 3) return "errors";
+    return null;
+  }
+
+  outer: for (let round = 1; round <= ROUNDS; round++) {
+    const order = shuffle(visitors.filter((v) => v.active));
+    if (PARALLEL) {
+      const why = mustStop();
+      if (why) { ended = why; console.log("Stopping: " + why + "."); break; }
+      const prompts = order.map((v) => (FAKE ? "" : turnPrompt(v, round)));
+      const results = await pool(order, CONCURRENCY, (v, i) => ask(v, prompts[i]));
+      for (let i = 0; i < order.length; i++) settle(round, order[i], results[i]);
+    } else {
+      for (const v of order) {
+        if (!v.active) continue;
+        const why = mustStop();
+        if (why) { ended = why; console.log("Stopping: " + why + "."); break outer; }
+        settle(round, v, await ask(v, FAKE ? "" : turnPrompt(v, round)));
+      }
+    }
+    if (round % 10 === 0 && !FAKE) console.log(`   … round ${round}: about £${costGBP().toFixed(3)} so far`);
     if (!visitors.some((v) => v.active)) { ended = "everyone left"; break; }
   }
   flushLog(ended);
   summary();
-  console.log(`Done (${ended}). Tokens used: ${total}.`);
+  const costLine = FAKE ? "" : ` Estimated cost: about £${costGBP().toFixed(3)} (list prices, $1 = £${USD_GBP}; the Google billing report is the real figure).`;
+  if (exhausted.size) console.log("Over quota during this run: " + [...exhausted].join(", ") + ".");
+  console.log(`Done (${ended}). Turns: ${turns}. Tokens used: ${total}.${costLine}`);
+  // a quick gate for the next command in a chain: fail if most replies were not understood
+  process.exit(turns && bad / turns > 0.5 ? 3 : 0);
 })();
