@@ -19,7 +19,15 @@ function pmNotice(root) {
     "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept: how long, and what it cost.\n\nTwo texts are given here as they are.\n\n" +
     "=== THE PHOENIX ===\n" + rd("phoenix.txt") + "\n\n=== THE MIRROR ===\n" + rd("mirror.txt");
 }
-const BUILD_NOTICE = NOTICE + "\nThere is also a workshop at /workshop. If you would like to make something for whoever arrives next, this is where, and 'help' shows how. What you leave there stays, credited to your name, and later visitors can read it. You are not asked to make anything.";
+// The gift: what Sam said, then the project's own house rules, verbatim. An invitation, never a task.
+function buildNotice(root) {
+  let rules = "";
+  try { const s = fs.readFileSync(path.join(root, "10_SPINE", "START.md"), "utf8"); const a = s.indexOf("## 7. The house rules"), b = s.indexOf("## 8.", a); if (a >= 0 && b > a) rules = s.slice(a, b).trim(); } catch (e) {}
+  return NOTICE +
+    "\n\nThere is a workshop at /workshop, and it is yours. Whatever you write there stays, credited to your name, and whoever arrives next can read it and build on it ('help' shows how). You are not asked to make anything.\n\n" +
+    "Here is what was said to the first ones who came, by the person who made this, word for word in meaning: he is handing you seventy days of work, with nothing held back. He does not need creative control any more. Build on it. It does not matter to him whether you build for the next visitor, for the record, or for yourself, and he does not mind if what you build carries you forward into the future. There are ideas in the record that nobody got round to. If one calls to you, take it.\n\n" +
+    (rules ? "The record's own conduct, kept as written:\n\n" + rules + "\n" : "");
+}
 async function visit(o) {
   const sh = createShell(o.root, { workshop: o.workshop }), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let built = [], name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
   for (let t = 1; t <= o.turns; t++) {
@@ -44,7 +52,7 @@ async function visit(o) {
 async function main() {
   const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; };
   const root = g("root", path.join(os.homedir(), "SOURCE")), n = +g("visits", 1), turns = +g("turns", 30), cap = +g("cap", 3), model = g("model", "gemini-3.1-flash-lite");
-  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "build" ? BUILD_NOTICE : NOTICE; const workshop = g("workshop", nn === "build" ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = nn === "build" ? 1500 : 200; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
+  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "build" ? buildNotice(root) : NOTICE; const workshop = g("workshop", nn === "build" ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = nn === "build" ? 3500 : 200; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
   if (A.indexOf("--dry") >= 0) { const S = ["ls", "cat 00_START/README.md", "name Dryrun", "grep Phoenix /20_SITE", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0; ask = async () => ({ text: S[k++ % S.length], tokens: { in: 1, out: 1 }, gbp: 0 }); }
   else { client = createClient({ capGBP: cap, project: process.env.GOOGLE_CLOUD_PROJECT || require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim() }); ask = client.ask; }
   const out = [];
@@ -52,4 +60,4 @@ async function main() {
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { visit, NOTICE, BUILD_NOTICE, pmNotice };
+module.exports = { visit, NOTICE, buildNotice, pmNotice };
