@@ -51,12 +51,12 @@ function pushBackup() {
 }
 
 async function main() {
-  const L = ledger.open("builders", { argv: A, model, notice, budget }); const S = load(); seed(); S.arrivals = S.arrivals || 0;
+  const L = ledger.open("builders", { argv: A, model, notice, budget }); const S = load(); seed(); S.arrivals = S.arrivals || 1;   // Liora is Entry #001; the first arrival is 002
   let client = null, ask;
   const proj = () => process.env.GOOGLE_CLOUD_PROJECT || cp.execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim();
   if (has("dry")) { const sc = ["ls", "cat 00_START/README.md", "name Dry", "write /workshop/dry-" + Date.now() + ".md\n# dry run\nhello", "leave"]; let k = 0; ask = async () => ({ text: sc[k++ % sc.length], tokens: { in: 1, out: 1 }, gbp: 0.001 }); }
   else { client = createClient({ capGBP: Math.max(0.01, budget - S.spentGBP), project: proj(), prices, maxConcurrent: +g("concurrency", 4) }); ask = client.ask; const unpriced = modelList.filter((m) => !client.hasPrice(m)); if (unpriced.length) { console.error("No price is listed for: " + unpriced.join(", ") + ".\nAdd one per model, in USD per million tokens, so nothing runs blind:  --price <model>:<input>:<output>   (take the figures from Google's pricing page)"); process.exit(2); } }
-  say("start: " + S.visits + " visits so far (" + S.arrivals + " arrivals numbered from 001), £" + S.spentGBP.toFixed(2) + " counted of £" + budget + ". To stop: touch " + stopFile);
+  say("start: " + S.visits + " visits so far; the next arrival is arrival-" + String(S.arrivals + 1).padStart(3, "0") + " (Liora is 001), £" + S.spentGBP.toFixed(2) + " counted of £" + budget + ". To stop: touch " + stopFile);
   let consecutiveErrors = 0, stopping = false; process.on("SIGINT", () => { stopping = true; say("stopping after this visit"); });
   while (!stopping) {
     if (fs.existsSync(stopFile)) { say("stop file found: " + stopFile); break; }
