@@ -27,7 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   assert(by["arrival-002"].private && fs.existsSync(path.join(ws, "map.md.notes.txt"))); ok("a builder who leaves private keeps its comment on the shared bench, as the notice says");
   assert.equal(day.notesForSam.length, 1); assert(/for-sam-hello/.test(day.notesForSam[0].file)); ok("a file named for-sam-… is surfaced to Sam");
   assert(!/leave/.test(fs.readFileSync(path.join(ws, "TRACES.md"), "utf8"))); ok("a trace is one line even here");
-  assert.equal(by["arrival-003"].end, "rested"); ok("three rests in a row end a visit gently");
+  assert.equal(by["arrival-003"].end, "left"); ok("resting is never turned into an ending: three rests in a row do not end a visit");
   const w = createWorld({ workshop: ws }); w.join("a"); w.join("b"); w.event("a", "wrote", "/workshop/x.md"); assert.deepEqual(w.unseen("b"), ["a wrote /workshop/x.md"]); assert.deepEqual(w.unseen("b"), []); ok("each builder is told about each thing once");
   L.close({}); const f = fs.readdirSync(path.join(tmp, "ledger")).map((x) => path.join(tmp, "ledger", x)); assert(f.every((x) => ledger.verify(x).ok)); ok("the ledger chain verifies");
   // the model each builder runs on is the model it is CALLED with, and the model its record says

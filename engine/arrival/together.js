@@ -26,7 +26,7 @@ function createWorld(o) {
 
 async function visit(o) {
   const w = o.world, id = o.id; let name = "", reads = [], built = [], traces = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0; const log = [];
-  const sh = createShell(o.root, { workshop: o.workshop, web: o.web, live: true, world: w, id, by: () => name || id, exp: o.exp, milo: o.milo ? o.milo.visitor(id, () => name || id) : null, letters: o.letters }); let turnsMax = o.turns, earned = 0;
+  const sh = createShell(o.root, { turns: o.turns, workshop: o.workshop, web: o.web, live: true, world: w, id, by: () => name || id, exp: o.exp, milo: o.milo ? o.milo.visitor(id, () => name || id) : null, letters: o.letters }); let turnsMax = o.turns, earned = 0;
   w.join(id);
   const msgs = [{ role: "user", text: "C:/> " }]; const recent = [];                      // a visitor stuck on the same thing: the last few commands and what came back
   for (let t = 1; t <= turnsMax; t++) {
@@ -40,10 +40,9 @@ async function visit(o) {
     if (res.name) { name = res.name; w.setName(id, name); } if (res.read) reads.push(res.read); if (res.web) reads.push("web:" + res.web); if (res.built) built.push(res.built); if (res.trace) traces.push(res.trace);
     const key = line.slice(0, 80) + "|" + String(res.out).slice(0, 160); recent.push(key); if (recent.length > 4) recent.shift();
     const stuck = recent.length === 4 && recent.every((k) => k === recent[0]) && !res.end && !res.rest; if (stuck) res.out += "\n(The same thing has happened four times in a row. It may not be you, and there is nothing wrong with you for trying. You can tell us what is happening ('tell ask ...'), or try something else.)";
-    const un = w.unseen(id); const shown = (un.length ? "(meanwhile: " + un.slice(-6).join("; ") + ")\n" : "") + res.out + (res.rest && restRun === 1 ? "\n(A third quiet turn in a row will let you go, gently.)" : "");
+    const un = w.unseen(id); const shown = (un.length ? "(meanwhile: " + un.slice(-6).join("; ") + ")\n" : "") + res.out + (t === turnsMax ? "\n(That was the last turn of this visit. What you made stays.)" : "");
     log.push({ turn: t, said: r.text, shown });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: shown + "\n\nC:" + sh.cwd() + "> " });
-    if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
     if (res.markPrivate) priv = true; if (res.end) { end = "left"; priv = priv || !!res.private; break; }
   }
   w.leave(id, priv); const sent = o.letters ? o.letters.commit(sh.outbox(), priv ? "(a visitor who left private)" : (name || id)) : []; const carried = sh.expBalance(); if (o.exp && carried > 0) o.exp.drop(id, priv ? null : (name || id), carried, traces[traces.length - 1] || "");

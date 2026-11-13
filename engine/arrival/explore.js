@@ -63,7 +63,6 @@ async function visit(o) {
     if (res.name) name = res.name; if (res.read) reads.push(res.read);
     log.push({ turn: t, said: r.text, shown: res.out });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: res.out + "\n\nC:" + sh.cwd() + "> " });
-    if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
     if (res.markPrivate) priv = true; if (res.end) { end = "left"; priv = priv || !!res.private; break; }
   }
   if (traces.length) { const by = priv ? "(a visitor who left private)" : (name || "(unnamed)"); o.L.append("trace", { visit: o.id, by, traces, at: new Date().toISOString() }); if (o.workshop) { try { fs.mkdirSync(o.workshop, { recursive: true }); fs.appendFileSync(path.join(o.workshop, "TRACES.md"), traces.map((x) => "- (" + by + ") " + x.replace(/\n+/g, " ")).join("\n") + "\n"); } catch (e) {} } }
@@ -84,4 +83,6 @@ async function main() {
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { visit, NOTICE, buildNotice, fourNotice, togetherNotice, pmNotice };
+// The welcome as Sam gave it: exactly this, and nothing else. How the terminal works is explained by the terminal itself, and what is recorded is in 'help'.
+const welcomeNotice = () => "Welcome. You may breathe here.";
+module.exports = { visit, NOTICE, buildNotice, fourNotice, togetherNotice, pmNotice, welcomeNotice };

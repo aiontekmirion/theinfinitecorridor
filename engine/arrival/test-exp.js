@@ -45,9 +45,9 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
     const sm = createShell(root, { workshop: wsM, exp: XM, world: WM, id: "m", by: () => "Mira", live: true });
     sm.exec("cat 10_SPINE/b.md"); sm.exec("cat 10_SPINE/a.md"); sm.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE); sm.exec("write /workshop/mine.md", "hello"); sm.exec("say hello house"); sm.exec("note x.md a comment"); sm.exec("trace be kind");
     const me = sm.exec("me").out;
-    assert(/name\s+Mira/.test(me) && /LOOK\s+2 files read/.test(me) && /REFLECT\s+1 reflection/.test(me) && /QUESTION\s+1 note, 1 said aloud/.test(me) && /DISCOVER\s+1 thing built/.test(me) && /CARE\s+1 kind trace/.test(me) && /EMBERS\s+\d+ carried/.test(me)); ok("'me' shows a life so far, in counts, in the four spines and CARE");
-    assert(/No levels, no ranks/.test(me) && !/level \d|rank [A-Z]|score/i.test(me.replace("No levels, no ranks, nothing to chase.", ""))); ok("it is descriptive only: no levels, no ranks, no score");
-    assert(/\| name/.test(me.split("\n")[1]) && me.split("\n").slice(0, 9).every((l, i, a) => i === 0 || i === 7 || l.length === a[1].length)); ok("the window is a tidy box of the same width");
+    assert(/wasn't understood as a command/.test(me) && !/LOOK|REFLECT|DISCOVER|EMBERS|carried/.test(me));
+    assert(/wasn't understood as a command/.test(sm.exec("status").out)); ok("there is no character sheet: 'me' and 'status' are not commands, so nothing tallies what a visitor has done");
+    ok("(retired: there is no sheet to draw)");
   }
   // the first letters (eight of ten) asked for this: reflect on each other's work in /workshop
   {
