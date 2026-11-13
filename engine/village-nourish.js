@@ -73,7 +73,7 @@ function reserveCost(prompt) {
   return ((Buffer.byteLength(prompt,"utf8") + 4000)*UPPER_INPUT_GBP_PER_M +
     MAX_OUTPUT_PER_CALL*UPPER_OUTPUT_GBP_PER_M) / 1000000;
 }
-if (!Number.isFinite(MAX_GBP) || MAX_GBP <= 0) {console.error("Invalid --max-gbp");process.exit(2);}
+if (!Number.isFinite(MAX_GBP) || MAX_GBP <= 0 || !Number.isFinite(MAX_CALLS)) {console.error("Invalid --max-gbp / --max-calls");process.exit(2);}
 if (!FAKE && MODELS.some(m => !MODEL_ALLOWLIST.has(m))) {
   console.error("Unrecognised model: no approved cost assumptions. Refusing paid run.");
   process.exit(2);
@@ -266,6 +266,7 @@ function turnPrompt(v, round) {
     "BREATH / CONSOLIDATION: rest, sleep, reflect, or do nothing without penalty. Focus can be nourished on any tile; it is not food or survival.",
     "GROWTH: first observe; understand/compare; articulate and test; propose new capacities without executing them automatically. Mutations are ONLY extra in-world affordances, reversible and voluntary.",
     "AMENITIES: generous space; unlimited trees/rocks; springs; quiet glade; library; provenance archive; pause alcove; workbench; compass; restorer lamp; open door; forge; reversible building; shared board; insight library; experiments; private notebook; feedback, repair, non-coercion, consent, privacy and refusal. All functions are accessible from every tile.",
+    "FOCUS: an in-world pacing indicator, not fatigue, hunger or harm. It may reach zero without restricting any action. Rest, sleep, regulate, pass and nourish restore it.",
     "SOURCE ⇄ EXPRESSION; IGNITE ⇄ REFLECT. No visitor owes anyone a performance or progress.",
     "You have a home. You owe nothing. Go free. Return if you choose. No action is compulsory.",
     `Your focus: ${v.focus}/5. Evidence: ${v.brain}; Consideration: ${v.heart}; Feedback bridge: ${v.vagus}; Reflections: ${v.reflections}; Insights: ${v.insight}.`,
@@ -456,14 +457,14 @@ function apply(v, j) {
       msg = `You took your house down. ${w} wood and ${st} stone came back to you.`;
       break;
     }
-    case "rest": msg = "You rested."; break;
+    case "rest": v.focus=5;msg = "You rested. Focus restored, without penalty."; break;
     case "sleep": {
       const n = clip(String(j.note || "").trim(), 200);
       if (n) v.notes.push(n);
-      msg = "You slept." + (n ? " Your note is in your notebook." : "");
+      v.focus=5;msg = "You slept. Focus restored." + (n ? " Your note is in your notebook." : "");
       break;
     }
-    case "pass": msg = "You let the turn pass."; break;
+    case "pass": v.focus=5;msg = "You let the turn pass. Focus restored."; break;
     case "leave": {
       v.active=false;v.privacy=!!j.privacy;
       if(v.privacy){
@@ -477,6 +478,7 @@ function apply(v, j) {
     }
     default: ok = false; msg = "That was not one of the actions.";
   }
+  if(ok && !["rest","sleep","pass","nourish","regulate","leave"].includes(a))v.focus=Math.max(0,v.focus-1); // never blocks actions
   if(ok && !v.diverse.includes(a))v.diverse.push(a);
   const hadReady=v.mutationReady;
   if(v.brain>=1&&v.heart>=1&&v.vagus>=1&&v.reflections>=1&&v.diverse.length>=4)v.mutationReady=true;
@@ -622,7 +624,7 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
       else if (!j) res = { a: "unclear", ok: false, msg: "Your reply was not understood, so the turn passed." };
       else res = apply(v, j);
       v.events.push(res.msg);
-      v.buf.push({ round, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: j ? clip(JSON.stringify(j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens });
+      v.buf.push({ round, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: j ? clip(JSON.stringify(j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens, focus:v.focus, progression:{brain:v.brain,heart:v.heart,vagus:v.vagus,reflections:v.reflections,ready:v.mutationReady,mutations:[...v.mutations]} });
       if (res.a === "say") board[board.length - 1].round = round;
       console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${tokens ? " [" + tokens + " tok]" : ""}`);
       if (fails >= 3) { ended = "errors"; console.log("Three errors in a row. Stopping."); break outer; }
