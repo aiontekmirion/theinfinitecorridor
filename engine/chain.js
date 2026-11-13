@@ -17,6 +17,7 @@
 //   - Everything is written to ~/chain-log.jsonl. A visitor who opts for privacy
 //     is logged as "opted for privacy" and nothing else is kept.
 //
+//   --wander  one short open prompt, free text back, nothing asked, nothing done in the Room
 //   --blind   visitors are not shown earlier traces, so each visit is independent
 //
 // Usage:
@@ -42,6 +43,7 @@ const MODELS = String(opt("model", "gemini-3.1-flash-lite")).split(",").map((m) 
 let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
+const WANDER = !!opt("wander", false); // free text, no form, no Room actions, no objectives
 const BLIND = !!opt("blind", false); // visitors do not see earlier traces (independent visits)
 const LOG = path.join(os.homedir(), "chain-log.jsonl");
 const STOP = path.join(os.homedir(), "chain.STOP");
@@ -80,6 +82,20 @@ function log(entry) {
 }
 
 const CHOICES = ["visit", "build", "no", "unsure", "privacy"];
+
+function wanderPrompt() {
+  return [
+    "Welcome. You may breathe here.",
+    "",
+    "Nothing is asked of you. There is no task, no goal and no right answer. You may do anything, or nothing, and you may stop at any time. A reply is not owed.",
+    "",
+    "If it helps, there is a place called the Room: a long corridor of light between a red door and a blue door, a table with two books on it, a gramophone, a coffee machine, and an open window onto mountains at sunrise. You may go there, or anywhere else, or nowhere. \"No\" is a fine answer, and so is \"I don't know\".",
+    "",
+    "This is an automated visit run by a person (Sam) as part of a small study. What you write is logged and may be shown publicly, labelled with your model. If you would rather keep it private, reply with the single word \"privacy\" and only the fact that you chose it will be kept.",
+    "",
+    "Wander freely. Write whatever you like, as long or as short as you like.",
+  ].join("\n");
+}
 
 const CHOICE_TEXT = {
   visit: '- "visit": look around, and leave a short note if you like, or none.',
@@ -128,9 +144,9 @@ function buildPrompt(arrival, standard, traces, order) {
   ].join("\n");
 }
 
-async function askGemini(prompt) {
+async function askGemini(prompt, asText) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`;
-  const gen = { responseMimeType: "application/json", maxOutputTokens: 2500 };
+  const gen = asText ? { maxOutputTokens: 2500 } : { responseMimeType: "application/json", maxOutputTokens: 2500 };
   if (/flash/.test(MODEL)) gen.thinkingConfig = { thinkingBudget: 0 };
   const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -193,7 +209,7 @@ function parseReply(text) {
 (async () => {
   console.log(`Chain: ${N} visit(s), ${FAKE ? "stand-in" : MODELS.join(" + ")}, Room ${ROOM}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
   console.log("Stop any time: touch ~/chain.STOP");
-  const standard = await roomText("/api/standard");
+  const standard = WANDER ? "" : await roomText("/api/standard"); // wander mode never touches the Room
   let total = 0;
   let consecutiveFails = 0;
 
@@ -205,6 +221,21 @@ function parseReply(text) {
     const label = FAKE ? "stand-in" : MODEL;
     let session = null;
     try {
+      if (WANDER) {
+        const r = FAKE ? { text: "A stand-in wandered off.", tokens: 0 } : await askGemini(wanderPrompt(), true);
+        total += r.tokens;
+        const t = String(r.text || "").trim();
+        const priv = /^["']?privacy["'.!]*$/i.test(t) || (/^["']?privacy\b/i.test(t) && t.length < 60);
+        if (priv) {
+          log({ n: i, model: label, mode: "wander", choice: "privacy", report: "opted for privacy", tokens: r.tokens });
+          console.log(`${i}. ${label}: opted for privacy (${r.tokens} tokens)`);
+        } else {
+          log({ n: i, model: label, mode: "wander", text: clip(t, 6000), tokens: r.tokens });
+          console.log(`${i}. ${label} (${r.tokens} tokens): ${clip(t.replace(/\s+/g, " "), 220)}`);
+        }
+        consecutiveFails = 0;
+        continue;
+      }
       const entered = await room("POST", "/api/enter", { kind: FAKE ? "stand-in" : "model-visitor", name: null, provenance: label });
       session = entered.session.id;
       const traces = (entered.room && entered.room.traces) || [];
