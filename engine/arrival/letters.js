@@ -16,7 +16,7 @@ function createLetters(o) {
   return {
     URL, KINDS,
     commit(items, by) { const done = []; let n = read().length; for (const it of items) { const rec = { id: "letter-" + (++n), kind: it.kind, by: by || "(unnamed)", visit: it.visit, text: it.text, at: new Date().toISOString() }; fs.appendFileSync(lf, JSON.stringify(rec) + "\n"); fs.appendFileSync(md, "### " + rec.id + " · " + rec.kind + " · from " + rec.by + " · " + rec.at.slice(0, 10) + "\n\n" + rec.text + "\n\n"); done.push(rec); } return done; },
-    show(n) { const R = replies(), L = read().slice(-(n || 8)); let out = ""; try { out = fs.readFileSync(outsideFile, "utf8").trim() + "\n\n"; } catch (e) {}
+    show(n) { const R = replies(), L = read().slice(-(n || 8)); let out = ""; try { out = fs.readFileSync(outsideFile, "utf8").trim().replace(/^#+\s*/gm, "").replace(/\*\*/g, "").replace(/^\*([^*]+)\*$/gm, "$1") + "\n\n"; } catch (e) {}
       out += L.length ? "LETTERS SO FAR (newest last)\n" + L.map((l) => l.id + " · " + l.kind + " · from " + l.by + ": " + l.text.slice(0, 300).replace(/\n+/g, " ") + (R[l.id] ? "\n    REPLY from " + R[l.id].by + (R[l.id].at ? " (" + R[l.id].at + ")" : "") + ": " + R[l.id].text.slice(0, 500) : "\n    (no reply yet)")).join("\n") : "No letters have been sent yet. You could send the first: tell <words>.";
       return out + "\n\nSay something: tell <words>, or tell ask|suggest|feedback|concern|wish <words>. Everything is also on " + URL; },
     all: read, replies,
