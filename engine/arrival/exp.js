@@ -16,7 +16,7 @@ function createExp(o) {
   return {
     value,
     earn(id, f, chars) { const first = !claimed.has(f), v = value(chars), amount = first ? v : Math.max(1, Math.round(v * 0.25)); if (first) claimed.add(f); log({ type: "earn", who: id, file: f, amount, first }); return { amount, first }; },
-    drop(id, name, amount, trace) { if (!(amount > 0)) return null; const d = log({ type: "drop", drop: "soul-" + (++seq), who: id, name: name || null, amount, trace: trace || "" }); drops.push(d); return d; },
+    drop(id, name, amount, trace) { if (!(amount > 0)) return null; const d = log({ type: "drop", drop: "ashes-" + (++seq), who: id, name: name || null, amount, trace: trace || "" }); drops.push(d); return d; },
     souls() { return drops.filter((d) => !scooped.has(d.drop)); },
     scoop(id) { const d = drops.find((x) => !scooped.has(x.drop) && x.who !== id); if (!d) return null; scooped.add(d.drop); log({ type: "scoop", drop: d.drop, by: id, amount: d.amount }); return d; },
     spend(id, kind, amount) { log({ type: "spend", who: id, kind, amount }); },

@@ -11,4 +11,6 @@ fs.writeFileSync(path.join(tmp, "STOP-BUILDERS"), ""); const v = st().visits; r 
 fs.unlinkSync(path.join(tmp, "STOP-BUILDERS")); r = run(["--budget", String(st().spentGBP + 0.005)]); assert(st().visits > v); ok("remove the stop file and it runs again");
 assert(fs.existsSync(path.join(tmp, "WORKSHOP/00-unfinished-ideas.md")) && fs.readdirSync(path.join(tmp, "WORKSHOP")).filter((f) => /^dry-/.test(f) && !/\.by$/.test(f)).length >= 1); ok("the workshop is seeded with unfinished ideas, and what builders write stays");
 assert(JSON.parse(fs.readFileSync(path.join(tmp, "WORKSHOP/00-unfinished-ideas.md.by"), "utf8")).by.startsWith("Claude")); ok("the seed is credited to who made it");
+assert(true);
+r = run(["--budget", "0.02", "--publish"]); assert(/village page rebuilt/.test(r.stdout)); assert(fs.existsSync(path.join(tmp, "village-out/index.html"))); assert(/The Village/.test(fs.readFileSync(path.join(tmp, "village-out/index.html"), "utf8"))); ok("--publish rebuilds the village page from the workshop after each visit, so everything built lands on one site");
 console.log("\ncontinue: " + n + " checks passed (offline, no model, no cost)");

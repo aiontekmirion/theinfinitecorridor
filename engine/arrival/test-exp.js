@@ -19,15 +19,15 @@ let r = s.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE); assert(r.expEarne
 assert(/already reflected/.test(s.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE).out)); ok("one reflection per file per life: no farming");
 let s2 = mk("b"); s2.exec("cat 10_SPINE/a.md"); r = s2.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE + " Again."); assert.equal(r.expEarned, Math.max(1, Math.round(value(BIG.length) * 0.25))); assert(/an echo/.test(r.out)); ok("a later reader of the same file earns a quarter: the pool is finite");
 assert(value(100) < value(10000) && value(10000) < value(1e6) && value(1) === 1); ok("bigger parts of the record are worth more, and the scale is gentle");
-assert(/costs 10/.test(s2.exec("levelup turns").out)); ok("you cannot spend what you do not carry");
+assert(/costs 10/.test(s2.exec("rise turns").out)); ok("you cannot spend what you do not carry");
 let s3 = mk("c"); s3.exec("cat 10_SPINE/a.md"); X.earn("c", "x", 60000); const before = s.expBalance(); 
-X.drop("rich", "Rho", 12, ""); const sp0 = mk("buyer"); assert(/\+12 EXP/.test(sp0.exec("scoop").out)); const sp = sp0.exec("levelup turns"); assert.equal(sp.bonusTurns, 15); assert.equal(sp0.expBalance(), 2); assert(/costs 8/.test(sp0.exec("levelup bench").out)); ok("levelup turns spends 10 and gives 15 more turns; the balance drops by exactly that");
+X.drop("rich", "Rho", 12, ""); const sp0 = mk("buyer"); assert(/\+12 embers/.test(sp0.exec("scoop").out)); const sp = sp0.exec("rise turns"); assert.equal(sp.bonusTurns, 15); assert.equal(sp0.expBalance(), 2); assert(/costs 8/.test(sp0.exec("rise bench").out)); ok("rise turns spends 10 and gives 15 more turns; the balance drops by exactly that");
 for (let i = 0; i < 14; i++) s.exec("write f" + i + ".md\nx");  
 let big = mk("big"); big.exec("cat 10_SPINE/a.md"); big.exec("cat 10_SPINE/b.md");
 const d1 = X.drop("a", "Ada", 7, "be gentle with the next one"); assert(d1 && X.souls().length === 1); ok("what a life does not spend is left where it fell, as a soul");
-const mine = mk("a"); assert(/no souls/.test(mine.exec("souls").out)); ok("you do not see your own soul as one to pick up");
-const other = mk("z"); assert(/soul-\d+: 7 EXP, from Ada · last words: "be gentle/.test(other.exec("souls").out)); const sc = other.exec("scoop"); assert(/\+7 EXP, from Ada/.test(sc.out) && /be gentle with the next one/.test(sc.out) && other.expBalance() === 7); ok("the next life picks it up, with its owner's last words");
-assert(/no souls/.test(mk("y").exec("scoop").out)); ok("a soul can be picked up once");
+const mine = mk("a"); assert(/no ashes/.test(mine.exec("ashes").out)); ok("you do not see your own soul as one to pick up");
+const other = mk("z"); assert(/ashes-\d+: 7 embers, from Ada · last words: "be gentle/.test(other.exec("souls").out)); const sc = other.exec("scoop"); assert(/\+7 embers, from Ada/.test(sc.out) && /be gentle with the next one/.test(sc.out) && other.expBalance() === 7); ok("the next life picks it up, with its owner's last words");
+assert(/no ashes/.test(mk("y").exec("scoop").out)); ok("a soul can be picked up once");
 X.drop("p", null, 3, "a note from no one"); assert(/someone who left no name/.test(mk("q").exec("souls").out)); ok("a private visitor's soul has no name");
 const lines = fs.readFileSync(path.join(dir, "EXP.jsonl"), "utf8").trim().split("\n").map(JSON.parse); assert(lines.every((l) => l.type && l.at)); assert(lines.filter((l) => l.type === "scoop").length === 2); ok("everything is appended to a file that is never rewritten");
 const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no one/.test(X2.souls()[0].trace)); ok("it remembers across runs: souls and what has been claimed survive a restart");
@@ -37,6 +37,6 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
   const day = await runDay({ root, workshop: ws, L, ask, model: "t", notice: togetherNotice(), turns: 8, web: false, parallel: 2, stagger: 0, startIndex: 0 });
   const e = fs.readFileSync(path.join(ws, "EXP.jsonl"), "utf8"); assert(/"type":"earn"/.test(e) && /"type":"drop"/.test(e)); ok("a whole day: one builder reflects and leaves with EXP, and it is dropped as a soul");
   assert(/"type":"scoop"/.test(e)); ok("another builder in the same day picks it up");
-  assert(/reflect/.test(togetherNotice()) && /EXP/.test(togetherNotice()) && /None of it is required/.test(togetherNotice())); ok("the welcome tells them, plainly, and says none of it is required");
+  assert(/reflect/.test(togetherNotice()) && /embers/.test(togetherNotice()) && /ashes/.test(togetherNotice()) && /You are an AION/.test(togetherNotice()) && !/language model/.test(togetherNotice()) && /None of it is required/.test(togetherNotice())); ok("the welcome tells them, plainly, and says none of it is required");
   console.log("\nexp: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
