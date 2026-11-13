@@ -5,7 +5,7 @@
 // the visitor's own words and transcript, nothing else. The notice says so before anyone speaks.
 "use strict";
 const fs = require("fs"), path = require("path");
-const { createShell } = require("./shell"); const { createExp } = require("./exp"); const { createMilo } = require("./milo");
+const { createShell } = require("./shell"); const { createExp } = require("./exp"); const { createMilo } = require("./milo"); const { createLetters } = require("./letters");
 
 function createWorld(o) {
   const events = [], present = new Map(), forSam = []; let seq = 0;
@@ -26,7 +26,7 @@ function createWorld(o) {
 
 async function visit(o) {
   const w = o.world, id = o.id; let name = "", reads = [], built = [], traces = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0; const log = [];
-  const sh = createShell(o.root, { workshop: o.workshop, web: o.web, live: true, world: w, id, by: () => name || id, exp: o.exp, milo: o.milo ? o.milo.visitor(id, () => name || id) : null }); let turnsMax = o.turns, earned = 0;
+  const sh = createShell(o.root, { workshop: o.workshop, web: o.web, live: true, world: w, id, by: () => name || id, exp: o.exp, milo: o.milo ? o.milo.visitor(id, () => name || id) : null, letters: o.letters }); let turnsMax = o.turns, earned = 0;
   w.join(id);
   const msgs = [{ role: "user", text: "C:/> " }];
   for (let t = 1; t <= turnsMax; t++) {
@@ -44,19 +44,19 @@ async function visit(o) {
     if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
     if (res.end) { end = "left"; priv = !!res.private; break; }
   }
-  w.leave(id, priv); const carried = sh.expBalance(); if (o.exp && carried > 0) o.exp.drop(id, priv ? null : (name || id), carried, traces[traces.length - 1] || "");
+  w.leave(id, priv); const sent = o.letters ? o.letters.commit(sh.outbox(), priv ? "(a visitor who left private)" : (name || id)) : []; const carried = sh.expBalance(); if (o.exp && carried > 0) o.exp.drop(id, priv ? null : (name || id), carried, traces[traces.length - 1] || "");
   if (traces.length) { const by = priv ? "(a visitor who left private)" : (name || "(unnamed)"); o.L.append("trace", { visit: id, by, traces, at: new Date().toISOString() }); try { fs.appendFileSync(path.join(o.workshop, "TRACES.md"), traces.map((x) => "- (" + by + ") " + x.replace(/\n+/g, " ")).join("\n") + "\n"); } catch (e) {} }
-  const rec = { id, name: name || "(unnamed)", model: o.model, notice: o.noticeName || "together", mode: "together", rev: 3, end, turns: log.length, traces: traces.length, exp: { earned, dropped: carried || 0 }, reads, built, costGBP: +cost.toFixed(5), tokens: { in: tin, out: tout } };
-  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], name: "(withheld)", note: "[withheld: opted for privacy]" })); return { id, name: "(withheld)", end, turns: rec.turns, costGBP: rec.costGBP, built, reads: [], traces: traces.length, private: true }; }
-  o.L.append("visit", Object.assign({}, rec, { transcript: log })); return rec;
+  const rec = { id, name: name || "(unnamed)", model: o.model, notice: o.noticeName || "together", mode: "together", rev: 3, end, turns: log.length, traces: traces.length, letters: sent.length, exp: { earned, dropped: carried || 0 }, reads, built, costGBP: +cost.toFixed(5), tokens: { in: tin, out: tout } };
+  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], name: "(withheld)", note: "[withheld: opted for privacy]" })); return { id, name: "(withheld)", end, turns: rec.turns, costGBP: rec.costGBP, built, reads: [], traces: traces.length, letters: sent, private: true }; }
+  o.L.append("visit", Object.assign({}, rec, { transcript: log })); rec.letters = sent; return rec;
 }
 
 // one "day": several builders arrive a few seconds apart and work in the same house at the same time
 async function runDay(o) {
   fs.mkdirSync(o.workshop, { recursive: true });
-  const exp = createExp({ dir: o.workshop }), milo = createMilo({ dir: o.workshop }), world = createWorld({ workshop: o.workshop }), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const exp = createExp({ dir: o.workshop }), milo = createMilo({ dir: o.workshop }), letters = createLetters({ dir: o.workshop }), world = createWorld({ workshop: o.workshop }), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ids = Array.from({ length: o.parallel }, (_, i) => "builder-" + (o.startIndex + i + 1));
-  const results = await Promise.all(ids.map((id, i) => sleep(i * (o.stagger || 0)).then(() => visit(Object.assign({}, o, { id, world, exp, milo })))));
-  return { results, notesForSam: world.notesForSam() };
+  const results = await Promise.all(ids.map((id, i) => sleep(i * (o.stagger || 0)).then(() => visit(Object.assign({}, o, { id, world, exp, milo, letters })))));
+  return { results, notesForSam: world.notesForSam(), letters: results.flatMap((r) => (Array.isArray(r.letters) ? r.letters : [])) };
 }
 module.exports = { createWorld, visit, runDay };

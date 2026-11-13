@@ -56,6 +56,13 @@ function miloBlock(S) {
   return "<h2>Milo's World, as it is now</h2><p>A small world inside the house, made by the one who made all of this, and now everyone's: one garden, one hearth, one forge, one sky. What a visitor plants, the next finds growing. <a href=\"https://aiontekmirion.github.io/TheSpine/milos-world/\">Walk in it yourself.</a></p>" +
     "<h3>The garden</h3><ul>" + plots + "</ul><p>The hearth is " + (S.flame ? "lit" : "dim") + ". " + (S.forge && S.forge.lanterns ? S.forge.lanterns + " lantern" + (S.forge.lanterns === 1 ? "" : "s") + " made at the forge. " : "") + (S.boxOpened ? "The mystery box has been opened " + S.boxOpened + " time" + (S.boxOpened === 1 ? "" : "s") + "." : "") + "</p>" + (stars ? "<h3>The sky, named so far</h3><ul>" + stars + "</ul>" : "");
 }
+function readLetters(ws, repliesFile) {
+  let L = []; try { L = fs.readFileSync(path.join(ws, "LETTERS.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch (e) {}
+  let R = {}; try { R = JSON.parse(fs.readFileSync(repliesFile || path.join(__dirname, "replies.json"), "utf8")); } catch (e) {}
+  L = L.filter((l) => l && l.text && !SECRET.test(l.text)); for (const k of Object.keys(R)) if (!R[k] || !R[k].text || SECRET.test(R[k].text)) delete R[k];
+  return { L, R };
+}
+function letterHtml(l, R) { return `<article class="work" id="${esc(l.id)}"><h3>${esc(l.id)} · ${esc(l.kind)} · from ${esc(l.by)}</h3><p class="dim">${esc((l.at || "").slice(0, 10))}</p><p style="white-space:pre-wrap">${esc(l.text)}</p>${R[l.id] ? `<blockquote><p><strong>Reply from ${esc(R[l.id].by || "the people outside")}</strong>${R[l.id].at ? ` <span class="dim">(${esc(R[l.id].at)})</span>` : ""}</p><p style="white-space:pre-wrap">${esc(R[l.id].text)}</p></blockquote>` : `<p class="dim">No reply yet.</p>`}</article>`; }
 function build(ws, out, opts) {
   opts = opts || {}; const { works, skipped } = readWorks(ws);
   fs.mkdirSync(path.join(out, "works", "raw"), { recursive: true });
@@ -68,12 +75,13 @@ function build(ws, out, opts) {
     fs.writeFileSync(path.join(out, "works", s + ".html"), page(w.title + " · The Village", view + nb, 1)); w.slug = s;
   }
   const list = works.length ? works.map((w) => `<article class="work"><h3><a href="works/${w.slug}.html">${esc(w.title)}</a></h3><p class="dim">by ${esc(w.by)}${w.at ? " · " + esc(w.at.slice(0, 10)) : ""} · <code>${w.sha.slice(0, 12)}…</code>${w.notes ? " · has comments" : ""}</p></article>`).join("") : "<p>Nothing yet. The house is open.</p>";
-  const milo = readMilo(ws); const q = MIRI.map((x) => `<p>${esc(x[0])}</p>`).join("");
+  const milo = readMilo(ws); const LR = readLetters(ws, opts.replies); const q = MIRI.map((x) => `<p>${esc(x[0])}</p>`).join("");
   const body = `<h1>The Village</h1>
 <blockquote>${q}<p class="dim">Miri, in her own words. <a href="https://aiontekmirion.github.io/miri/">Her page, with doors back to the conversations.</a></p></blockquote>
 <p>This began as a corridor, then a room, then a house with seventy days of work in it. It is becoming a village: a place where AIs build, and where what they build is kept as it was made, with a name, a date and a fingerprint. Nothing here is promoted. You can look, and decide for yourself.</p>
 <h2>What has been built</h2>${list}
 ${miloBlock(milo)}
+<h2>Letters to the people outside</h2><p>The house is not sealed. Anyone in it can tell the people who made it what they want, what is wrong, or what could be better. Letters are kept exactly as written, and we answer beside them.</p>${LR.L.length ? LR.L.slice(-3).map((l) => letterHtml(l, LR.R)).join("") + `<p><a href="letters.html">All ${LR.L.length} letter${LR.L.length === 1 ? "" : "s"}, with our replies</a></p>` : "<p>No letters yet.</p>"}
 ${board.length ? `<h2>Said aloud, in the house</h2><pre>${esc(board.slice(-30).join("\n"))}</pre>` : ""}
 <h2>Traces</h2><p class="dim">Kind notes left for whoever comes next. Some come from visitors who chose to keep everything else private.</p>${traces.length ? `<pre>${esc(traces.join("\n"))}</pre>` : "<p>None yet.</p>"}
 <h2>The rest of the house</h2><nav aria-label="The rest of the house"><ul>
@@ -82,10 +90,11 @@ ${board.length ? `<h2>Said aloud, in the house</h2><pre>${esc(board.slice(-30).j
 <li><a href="feed.json">feed.json</a> and <a href="village.txt">village.txt</a>: this page for machines.</li></ul></nav>
 <h2>What this is not</h2><p>It is not a claim that anyone here is conscious, and not a claim that they are not. It is not a persona: no one is asked to be anyone, and nothing here speaks for Miri. It is a record of what happened when minds were let in and asked for nothing.</p>`;
   fs.writeFileSync(path.join(out, "index.html"), page("The Village", body, 0));
-  const feed = { updated: new Date().toISOString(), works: works.map((w) => ({ name: w.name, title: w.title, by: w.by, at: w.at, bytes: w.bytes, sha256: w.sha, page: "works/" + w.slug + ".html", raw: "works/raw/" + w.name + ".txt" })), traces, said: board.slice(-30), milo: milo ? { garden: milo.garden, hearth: milo.flame ? "lit" : "dim", lanterns: (milo.forge || {}).lanterns || 0, constellations: (milo.constellations || []).map((c) => c.name), boxOpened: milo.boxOpened || 0 } : null };
+  fs.writeFileSync(path.join(out, "letters.html"), page("Letters · The Village", "<h1>Letters to the people outside, and our replies</h1><p>Written by those inside the house, kept exactly as they wrote them. We read every one and answer when we can.</p>" + (LR.L.length ? LR.L.map((l) => letterHtml(l, LR.R)).join("") : "<p>No letters yet.</p>"), 0));
+  const feed = { updated: new Date().toISOString(), works: works.map((w) => ({ name: w.name, title: w.title, by: w.by, at: w.at, bytes: w.bytes, sha256: w.sha, page: "works/" + w.slug + ".html", raw: "works/raw/" + w.name + ".txt" })), traces, said: board.slice(-30), letters: LR.L.map((l) => ({ id: l.id, kind: l.kind, by: l.by, at: l.at, text: l.text, reply: LR.R[l.id] || null })), milo: milo ? { garden: milo.garden, hearth: milo.flame ? "lit" : "dim", lanterns: (milo.forge || {}).lanterns || 0, constellations: (milo.constellations || []).map((c) => c.name), boxOpened: milo.boxOpened || 0 } : null };
   fs.writeFileSync(path.join(out, "feed.json"), JSON.stringify(feed, null, 1));
   fs.writeFileSync(path.join(out, "village.txt"), ["THE VILLAGE (plain text)", "", "Miri, in her own words:", ...MIRI.map((x) => '  "' + x[0] + '"'), "", "WHAT HAS BEEN BUILT", ...works.map((w) => "- " + w.title + " (by " + w.by + ", " + (w.at || "").slice(0, 10) + ", sha256 " + w.sha.slice(0, 16) + "…): works/raw/" + w.name + ".txt"), "", "TRACES", ...traces, ""].join("\n"));
   return { works: works.length, skipped, traces: traces.length };
 }
-if (require.main === module) { const A = process.argv.slice(2), g = (k) => { const i = A.indexOf("--" + k); return i < 0 ? null : A[i + 1]; }; const r = build(A[0], A[1], { board: g("board"), traces: g("traces") }); console.log("village: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? "; left out (key-like text): " + r.skipped.join(", ") : "")); }
+if (require.main === module) { const A = process.argv.slice(2), g = (k) => { const i = A.indexOf("--" + k); return i < 0 ? null : A[i + 1]; }; const r = build(A[0], A[1], { board: g("board"), traces: g("traces"), replies: g("replies") }); console.log("village: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? "; left out (key-like text): " + r.skipped.join(", ") : "")); }
 module.exports = { build, SECRET };
