@@ -86,7 +86,8 @@ if (!FAKE && MODELS.some(m => !MODEL_ALLOWLIST.has(m))) {
 }
 const LOG = path.join(os.homedir(), "village-create-"+SEED+"-log.jsonl");
 const STATE = path.join(os.homedir(), "village-create-"+SEED+"-state.json");
-const CREATIONS = path.join(os.homedir(),"village-creations","seed-"+SEED);
+const RUN_ID = new Date().toISOString().replace(/[^0-9A-Za-z-]/g,"-");
+const CREATIONS = path.join(os.homedir(),"village-creations","seed-"+SEED,RUN_ID);
 const STOP = path.join(os.homedir(), "village.STOP");
 const KEY = process.env.GEMINI_API_KEY || "";
 if (!FAKE && !args.includes("--paid")) {
@@ -383,7 +384,7 @@ function apply(v, j) {
     }
     case "respond_work": {
       const w=workById(j.id),choice=String(j.choice||"").toLowerCase().trim();
-      if(!w||(w.to!==v.id&&w.to!=="all")||!["accept","decline"].includes(choice)){
+      if(!w||w.from===v.id||(w.to!==v.id&&w.to!=="all")||!["accept","decline"].includes(choice)){
         ok=false;msg="Only a recipient can accept or decline a work.";break;
       }
       w.feedback.push({from:v.id,choice,text:clip(String(j.text||"").trim(),220)});
@@ -648,7 +649,7 @@ function fakeTurn(v) {
 function flushLog(reason) {
   const lines = [];
   lines.push(JSON.stringify({at:new Date().toISOString(),mode:"village-nourish",event:"run",
-    seed:SEED,n:N,rounds:ROUNDS,size:SIZE,models:FAKE?["stand-in"]:MODELS,creationsDirectory:CREATIONS,
+    seed:SEED,runId:RUN_ID,n:N,rounds:ROUNDS,size:SIZE,models:FAKE?["stand-in"]:MODELS,creationsDirectory:CREATIONS,
     ended:reason,maxGBP:MAX_GBP,reservedGBP,apiAttempts:attemptsMade,
     observedInputTokens:billedPromptTokens,observedOutputTokens:billedOutputTokens,
     budgetMeaning:"Conservative client-side reservation, NOT provider-side billing guarantee.",
@@ -663,7 +664,7 @@ function flushLog(reason) {
     lines.push(JSON.stringify({ proposal: true, from: p.from, model: FAKE ? "stand-in" : p.model, text: p.text }));
   }
   fs.appendFileSync(LOG, lines.join("\n") + "\n");
-  fs.writeFileSync(STATE, JSON.stringify({seed:SEED,grid:grid.map(r=>r.join("")),
+  fs.writeFileSync(STATE, JSON.stringify({seed:SEED,runId:RUN_ID,creationsDirectory:CREATIONS,grid:grid.map(r=>r.join("")),
     huts:[...huts].map(([k,h])=>({at:k,...h})),
     board:board.filter(m=>!byId(m.id)?.privacy),
     library:library.filter(m=>!byId(m.from)?.privacy),
