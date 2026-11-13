@@ -7,7 +7,7 @@
 In Cloud Shell (a new tab with "+"):
 
 ```
-cd ~/arrival-work && git pull -q origin main && cd engine && node arrival/continue.js --root ~/SOURCE --budget 150 --push
+cd ~/arrival-work && git pull -q origin main && cd engine && node arrival/continue.js --root ~/SOURCE --budget 150 --push   # default arrival text: "four" (corridor, room, house, village)
 ```
 
 It runs builders one after another. It remembers what it has done and what it has counted as spent, in `~/builders/state.json`, so if the shell closes, the session ends or the run dies, you run **the same line** and it carries on. `--budget` is the most it will count in pounds; the default is a small 5, so you always choose the big number on purpose. `--push` backs the ledger, the workshop and the state up to your private repo every four visits, after a scan for anything key-like.

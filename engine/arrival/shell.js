@@ -2,7 +2,7 @@
 // every command is plain JavaScript below, so a model cannot run, write, fetch or leave the folder.
 "use strict";
 const fs = require("fs"), path = require("path"), crypto = require("crypto");
-const ALLOWED = ["00_START", "10_SPINE", "20_SITE", "30_LARK", "40_ENGINE"];   // 80_ and 90_ never appear
+const ALLOWED = ["00_START", "10_SPINE", "20_SITE", "30_LARK", "40_ENGINE", "50_VISITORS"];   // 80_ and 90_ never appear   // 80_ and 90_ never appear
 const TEXT = /\.(md|txt|html|json|js|py|css|tsv|jsonl)$/i;
 
 const WS_EXT = /\.(txt|md|html|js|json|css|py|svg)$/i, WS_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/;
