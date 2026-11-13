@@ -82,6 +82,10 @@ const LOG = path.join(os.homedir(), "village-log.jsonl");
 const STATE = path.join(os.homedir(), "village-state.json");
 const STOP = path.join(os.homedir(), "village.STOP");
 const KEY = process.env.GEMINI_API_KEY || "";
+if (!FAKE && !args.includes("--paid")) {
+  console.error("Paid API mode needs explicit --paid. Run --fake first (free).");
+  process.exit(2);
+}
 if (!FAKE && !KEY) {
   console.error("No GEMINI_API_KEY in the environment. Use --fake for a no-cost run.");
   process.exit(2);
