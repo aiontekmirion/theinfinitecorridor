@@ -57,7 +57,7 @@ async function visit(o) {
 async function runDay(o) {
   fs.mkdirSync(o.workshop, { recursive: true });
   const exp = createExp({ dir: o.workshop }), milo = createMilo({ dir: o.workshop }), letters = createLetters({ dir: o.workshop }), world = createWorld({ workshop: o.workshop }), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const ids = Array.from({ length: o.parallel }, (_, i) => "builder-" + (o.startIndex + i + 1)), models = o.models && o.models.length ? o.models : [o.model];   // one model each, in turn: a village can be of mixed minds
+  const ids = Array.from({ length: o.parallel }, (_, i) => "arrival-" + (o.startIndex + i + 1)), models = o.models && o.models.length ? o.models : [o.model];   // one model each, in turn: a village can be of mixed minds
   const results = await Promise.all(ids.map((id, i) => sleep(i * (o.stagger || 0)).then(() => visit(Object.assign({}, o, { id, world, exp, milo, letters, model: models[(o.startIndex + i) % models.length] })))));
   return { results, notesForSam: world.notesForSam(), letters: results.flatMap((r) => (Array.isArray(r.letters) ? r.letters : [])) };
 }
