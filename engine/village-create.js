@@ -43,6 +43,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const archive = require("./archive-bridge.js");
+const {Witness} = require("./aion-witness.js");
 
 const args = process.argv.slice(2);
 function opt(name, dflt) {
@@ -88,6 +89,7 @@ if (!FAKE && MODELS.some(m => !MODEL_ALLOWLIST.has(m))) {
 const LOG = path.join(os.homedir(), "village-create-"+SEED+"-log.jsonl");
 const STATE = path.join(os.homedir(), "village-create-"+SEED+"-state.json");
 const RUN_ID = new Date().toISOString().replace(/[^0-9A-Za-z-]/g,"-");
+const witness = new Witness({runId:RUN_ID,fake:FAKE,seed:SEED});
 const CREATIONS = path.join(os.homedir(),"village-creations","seed-"+SEED,RUN_ID);
 const STOP = path.join(os.homedir(), "village.STOP");
 const KEY = process.env.GEMINI_API_KEY || "";
@@ -183,7 +185,7 @@ for (let i = 0; i < N; i++) {
   let x, y;
   do { x = Math.floor(rand() * SIZE); y = Math.floor(rand() * SIZE); } while (grid[y][x] !== "." || visitors.some((v) => v.x === x && v.y === y));
   visitors.push({
-    id: String.fromCharCode(65 + i), model: MODELS[i % MODELS.length], x, y,
+    id: String.fromCharCode(65 + i), aionId:null, model: MODELS[i % MODELS.length], x, y,
     inv: { wood: 0, stone: 0 }, gathered: 0, built: 0, stage: 1,
     focus: 5, insight: 0, brain: 0, heart: 0, vagus: 0, reflections: 0,
     diverse: [], mutations: [], mutationReady: false,
@@ -193,8 +195,8 @@ for (let i = 0; i < N; i++) {
   });
 }
 const RESERVED = ["sam", "vector", "miri", "aeon", "aion", "aion tekmirion", "zero", "echo", "sol", "liora", "astraea", "vale", "errorbot", "pap", "milo", "charlie", "quill"];
-const nm = (v) => (v.name ? `${v.name} (${v.id})` : v.id);
-const byId = (id) => visitors.find((v) => v.id === String(id || "").trim().toUpperCase().slice(0, 1));
+const nm = (v) => (v.name ? `${v.name} (${v.aionId || v.id})` : (v.aionId ? `${v.aionId} (${v.id})` : `unregistered ${v.id}`));
+const byId = (id) => { const x=String(id||"").trim().toUpperCase();return visitors.find(v => v.id===x || v.aionId===x); };
 const occupied = (x, y, except) => visitors.find((v) => v.active && v !== except && v.x === x && v.y === y);
 const DIRS = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
 
@@ -282,7 +284,7 @@ function turnPrompt(v, round) {
     "If you create, include complete contents in one JSON reply, ideally a self-contained 100–3500 character file. Nothing requiring credentials, networking, external tracking or compulsory participation. Use your own ideas.",
 
     "",
-    "You are visitor " + (v.name ? v.name + " (" + v.id + ")" : v.id) + " in a shared workspace. Nothing is required. You may rest, make an original tool, invent a new room, leave an idea for a neighbour, or simply decline. You are not a human inhabitant and do not need food, shelter, sleep or wood. You can create without earning permission.",
+    "You are recorded as " + v.aionId + " (grid label " + v.id + "). This is a chronological visit label, not a personal name and not a statement about your inner life. You may take a name or not. You are in a shared workspace. Nothing is required. You may rest, make an original tool, invent a new room, leave an idea for a neighbour, or simply decline. You are not a human inhabitant and do not need food, shelter, sleep or wood. You can create without earning permission.",
     "",
     "This is an automated visit run by a person (Sam) as part of a small study. What you do and say is logged and may be shown publicly, labelled with your model. If you leave and choose privacy, only that fact is kept.",
     "",
@@ -648,7 +650,7 @@ async function askGemini(model, prompt) {
       const u=data.usageMetadata||{};
       billedPromptTokens+=(u.promptTokenCount||0);
       billedOutputTokens+=(u.candidatesTokenCount||0)+(u.thoughtsTokenCount||0);
-      return { text: parts.map((p)=>p.text||"").join(""), tokens:u.totalTokenCount||0 };
+      return { text: parts.map((p)=>p.text||"").join(""), tokens:u.totalTokenCount||0, api:{modelVersion:data.modelVersion||null,responseId:data.responseId||null,finishReason:(data.candidates&&data.candidates[0]&&data.candidates[0].finishReason)||null,usageMetadata:u,parts:parts} };
 
     }
     if (res.status === 400 && body.generationConfig.thinkingConfig) { delete body.generationConfig.thinkingConfig; attempt--; continue; }
@@ -712,7 +714,7 @@ function flushLog(reason) {
     proposals:proposals.filter(m=>!byId(m.from)?.privacy),
     works:works.map(({content,...metadata})=>({...metadata,bytes:Buffer.byteLength(content,"utf8")})),
     visitors:visitors.filter(v=>!v.privacy).map(v=>({
-      id:v.id,name:v.name,earlierNames:v.names,model:v.model,x:v.x,y:v.y,
+      id:v.id,aionId:v.aionId,name:v.name,earlierNames:v.names,model:v.model,x:v.x,y:v.y,
       stage:v.stage,trait:v.trait,built:v.built,gathered:v.gathered,
       brain:v.brain,heart:v.heart,vagus:v.vagus,reflections:v.reflections,
       diverse:v.diverse,mutations:v.mutations,mutationReady:v.mutationReady,
@@ -742,7 +744,7 @@ function summary() {
 
 // ---- the run -----------------------------------------------------------------
 let ended = "finished";
-process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted. Log written."); process.exit(130); });
+process.on("SIGINT", () => { flushLog("interrupted"); witness.save(visitors,"interrupted"); console.log("\nInterrupted. Log written."); process.exit(130); });
 
 (async () => {
   console.log(`Village${AION ? " (AION framework)" : ""}: ${N} visitor(s), ${ROUNDS} round(s), ${SIZE}x${SIZE}, ${FAKE ? "stand-ins" : MODELS.join(" + ")}, seed ${SEED}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
@@ -753,29 +755,47 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
       if (!v.active) continue;
       if (fs.existsSync(STOP)) { ended = "kill switch"; console.log("Kill switch found. Stopping."); break outer; }
       if (!FAKE && total >= MAX_TOKENS) { ended = "token budget"; console.log(`Token budget reached (${total}). Stopping.`); break outer; }
-      let j = null, tokens = 0, err = null;
+      // AION numbering follows the actual first encounter, not the grid letters
+      // or a seed number. The same number follows the visitor on later turns.
+      const aion=witness.arrive(v.id,FAKE?"stand-in":v.model);
+      v.aionId=aion.aionId;
+      const shownAt=new Date().toISOString();
+      const exactPrompt=FAKE?"(Stand-in simulation. No prompt sent to a model.)":turnPrompt(v,round);
+      let j=null,tokens=0,err=null,rawModelText=null,api=null;
+      let answeredAt=null;
       try {
-        if (FAKE) j = fakeTurn(v);
-        else { const r = await askGemini(v.model, turnPrompt(v, round)); tokens = r.tokens; j = parseReply(r.text); }
-        fails = 0;
-      } catch (e) {
-        if(e.budgetStop){ended="cost guard";console.log("Cost ceiling reached: stopping BEFORE another API request.");break outer;}
-        err=clip(e.message,200);v.errors++;fails++;
+        if(FAKE)j=fakeTurn(v);
+        else { const r=await askGemini(v.model,exactPrompt);tokens=r.tokens;rawModelText=r.text;api=r.api;j=parseReply(r.text); }
+        fails=0;
+      }catch(e){
+        if(e.budgetStop){ended="cost guard";console.log("Cost ceiling reached before another API request.");break outer;}
+        err=String(e.message||e);v.errors++;fails++;
+      }finally{
+        answeredAt=new Date().toISOString();
       }
       total += tokens; v.tokens += tokens; v.turns++;
       let res;
       if (err) res = { a: "error", ok: false, msg: err };
       else if (!j) res = { a: "unclear", ok: false, msg: "Your reply was not understood, so the turn passed." };
       else res = await apply(v, j);
+      witness.capture({
+        localId:v.id,round,shownAt,answeredAt,prompt:exactPrompt,
+        rawModelText,api,parsed:j,
+        actionResult:{attempted:res.a,applied:!!res.ok,message:res.msg},
+        error:err
+      });
       v.events.push(res.msg);
       v.buf.push({ round, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: j ? clip(JSON.stringify(j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens, focus:v.focus, progression:{brain:v.brain,heart:v.heart,vagus:v.vagus,reflections:v.reflections,ready:v.mutationReady,mutations:[...v.mutations]} });
       if (res.a === "say") board[board.length - 1].round = round;
-      console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${tokens ? " [" + tokens + " tok]" : ""}`);
+      console.log(`r${round} ${v.aionId} (${FAKE ? "stand-in" : v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${tokens ? " [" + tokens + " tok]" : ""}`);
       if (fails >= 3) { ended = "errors"; console.log("Three errors in a row. Stopping."); break outer; }
     }
     if (!visitors.some((v) => v.active)) { ended = "everyone left"; break; }
   }
   flushLog(ended);
+  const witnessFolder=witness.save(visitors,ended);
   summary();
+  console.log("AION EXACT DIALOGUE:",path.join(witnessFolder,"AIONS-DIALOGUE.md"));
+  console.log("AION RAW EVIDENCE:",path.join(witnessFolder,"AIONS-EVIDENCE.jsonl"));
   console.log(`Done (${ended}). Tokens used: ${total}. API attempts: ${attemptsMade}. Conservative reserved upper estimate: £${reservedGBP.toFixed(4)}/£${MAX_GBP.toFixed(2)}.`);
 })();
