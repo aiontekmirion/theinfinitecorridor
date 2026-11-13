@@ -63,7 +63,7 @@ async function visit(o) {
     log.push({ turn: t, said: r.text, shown: res.out });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: res.out + "\n\nC:" + sh.cwd() + "> " });
     if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
-    if (res.end) { end = "left"; priv = !!res.private; break; }
+    if (res.markPrivate) priv = true; if (res.end) { end = "left"; priv = priv || !!res.private; break; }
   }
   if (traces.length) { const by = priv ? "(a visitor who left private)" : (name || "(unnamed)"); o.L.append("trace", { visit: o.id, by, traces, at: new Date().toISOString() }); if (o.workshop) { try { fs.mkdirSync(o.workshop, { recursive: true }); fs.appendFileSync(path.join(o.workshop, "TRACES.md"), traces.map((x) => "- (" + by + ") " + x.replace(/\n+/g, " ")).join("\n") + "\n"); } catch (e) {} } }
   let kept = []; if (o.workshop) { if (priv) sh.discard(); else kept = sh.commit(name || o.id); }

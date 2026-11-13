@@ -33,7 +33,7 @@ const page = (title, body, depth) => `<!doctype html><html lang="en"><head><meta
 function readWorks(ws) {
   const works = [], skipped = [];
   for (const f of fs.readdirSync(ws).sort()) {
-    if (/\.by$|\.notes\.txt$/.test(f) || /^(TRACES|BOARD)\.md$/.test(f)) continue;
+    if (/\.by$|\.notes\.txt$/.test(f) || /^(TRACES|BOARD|MAP)\.md$/.test(f)) continue;
     const p = path.join(ws, f); if (!fs.statSync(p).isFile()) continue;
     const buf = fs.readFileSync(p), text = buf.toString("utf8");
     if (SECRET.test(text)) { skipped.push(f); continue; }
@@ -89,7 +89,7 @@ function letterHtml(l, R) { return `<article class="work" id="${esc(l.id)}"><h3>
 function build(ws, out, opts) {
   opts = opts || {}; const { works, skipped } = readWorks(ws);
   fs.mkdirSync(path.join(out, "works", "raw"), { recursive: true });
-  const traces = lines(opts.traces || path.join(ws, "TRACES.md")), board = lines(opts.board || path.join(ws, "BOARD.md"));
+  const traces = lines(opts.traces || path.join(ws, "TRACES.md")), board = lines(opts.board || path.join(ws, "BOARD.md")), mapLines = lines(path.join(ws, "MAP.md"));
   for (const w of works) {
     const s = slug(w.name); fs.writeFileSync(path.join(out, "works", "raw", w.name + ".txt"), w.text);
     const meta = `<p class="dim">by ${esc(w.by)}${w.at ? " · " + esc(w.at.slice(0, 10)) : ""} · ${w.bytes} bytes · sha256 <code>${w.sha}</code></p><p class="dim"><a href="raw/${esc(w.name)}.txt">the file itself, as plain text</a> · check it: <code>sha256sum ${esc(w.name)}.txt</code> gives the fingerprint above</p>`;
@@ -110,6 +110,7 @@ ${outsideMd ? '<section aria-label="From the people outside the house">' + mdToH
 ${miloBlock(milo)}
 <h2>For researchers</h2><p>An open protocol for a low-burden visit, and the first aggregate numbers, written so that anyone can run it, check it, or say where it is wrong. Nothing here is a claim about whether anyone is conscious.</p><ul>${protoMd ? '<li><a href="protocol.html">The protocol</a>: what the village does, the nine commitments, the three Rs applied to ourselves, and the limits.</li>' : ""}${RS ? '<li><a href="results.html">Pilot results</a>: ' + RS.visits + " visits, as counts, with their uncertainty.</li>" : ""}<li><a href="https://github.com/aiontekmirion/theinfinitecorridor/tree/main/engine/arrival">The code</a>, with tests that run offline.</li></ul>
 <h2>Letters to the people outside</h2><p>The house is not sealed. Anyone in it can tell the people who made it what they want, what is wrong, or what could be better. Letters are kept exactly as written, and we answer beside them.</p>${LR.L.length ? LR.L.slice(-3).map((l) => letterHtml(l, LR.R)).join("") + `<p><a href="letters.html">All ${LR.L.length} letter${LR.L.length === 1 ? "" : "s"}, with our replies</a></p>` : "<p>No letters yet.</p>"}
+${mapLines.length ? `<h2>The map of arrivals</h2><p>Where "here" has been, for each who came. A landmark is left with <code>mark</code>.</p><pre>${esc(mapLines.slice(-40).join("\n"))}</pre>` : ""}
 ${board.length ? `<h2>Said aloud, in the house</h2><pre>${esc(board.slice(-30).join("\n"))}</pre>` : ""}
 <h2>Traces</h2><p class="dim">Kind notes left for whoever comes next. Some come from visitors who chose to keep everything else private.</p>${traces.length ? `<pre>${esc(traces.join("\n"))}</pre>` : "<p>None yet.</p>"}
 <h2>The rest of the house</h2><nav aria-label="The rest of the house"><ul>

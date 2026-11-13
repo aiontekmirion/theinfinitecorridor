@@ -21,12 +21,12 @@ function createMilo(o) {
   const plotN = (s) => { const m = String(s || "").match(/(\d)\s*$/); const n = m ? +m[1] : 0; return n >= 1 && n <= 4 ? n - 1 : -1; };
 
   function visitor(id, by) {
-    let scene = "room"; const pockets = []; const who = () => (by ? by() : id);
+    let scene = "room"; const pockets = []; const lights = { fire: false, mirror: false }; const who = () => (by ? by() : id); // the two lights you have found are yours; the lanterns made are everyone's
     const arrive = (s) => { scene = s; return "== " + NAMES[s][0] + " · " + NAMES[s][1] + "\n" + ARRIVE[s]; };
     const sceneState = () => {
       if (scene === "room") return "The hearth is " + (S.flame ? "lit." : "dim.") + " " + (S.shelf.length ? "On the small shelf by the door: " + S.shelf.map((x) => x.item + (x.why ? " (" + x.by + ": \u201c" + x.why + "\u201d)" : " (left by " + x.by + ")")).join("; ") + "." : "The small shelf by the door is empty. 'put' leaves something on it.");
       if (scene === "garden") return "Plots: " + S.garden.map((v, i) => (i + 1) + " " + STAGE[v]).join(", ") + ".";
-      if (scene === "forge") return "Ignition " + (S.forge.fire ? "found" : "not yet looked at") + "; reflection " + (S.forge.mirror ? "found" : "not yet looked at") + "; " + S.forge.lanterns + " lantern" + (S.forge.lanterns === 1 ? "" : "s") + " made.";
+      if (scene === "forge") return "You have found: ignition " + (lights.fire ? "\u2713" : "not yet") + ", reflection " + (lights.mirror ? "\u2713" : "not yet") + ". " + S.forge.lanterns + " lantern" + (S.forge.lanterns === 1 ? "" : "s") + " made by everyone so far.";
       if (scene === "stars") return S.constellations.length ? "Named so far: " + S.constellations.map((c) => c.name).join("; ") + "." : "No constellation has been named yet. Nine stars wait, numbered 1 to 9.";
       if (scene === "door") return S.boxOpened ? "The box has been opened " + S.boxOpened + " time" + (S.boxOpened === 1 ? "" : "s") + "." : "The box has never been opened.";
       return "";
@@ -45,8 +45,8 @@ function createMilo(o) {
         case "forest:fox": return "The fox offers to show you the paths, then sits down to let you choose.";
         case "forest:old tree": return "Under the bark are more stories than Milo can count.";
         case "forest:mushroom": return "A mushroom. A very small kingdom. Nobody has filed the paperwork.";
-        case "forge:ignition": S.forge.fire = true; save(who(), "found the ignition"); return "A warm spark is here. No one has to use it.";
-        case "forge:reflection": S.forge.mirror = true; save(who(), "found the reflection"); return "The mirror holds a second kind of light.";
+        case "forge:ignition": lights.fire = true; save(who(), "found the ignition"); return "A warm spark is here. No one has to use it.";
+        case "forge:reflection": lights.mirror = true; save(who(), "found the reflection"); return "The mirror holds a second kind of light.";
         case "forge:anvil": return "The anvil waits patiently. Something can be made here.";
         case "stars:telescope": return "The telescope reveals a sky larger than its frame.";
         case "door:blue door": return arrive("room");
@@ -67,7 +67,7 @@ function createMilo(o) {
         case "examine": case "use": return examine(a);
         case "tend": case "plant": case "water": { if (scene !== "garden") return "There is no garden here. 'go garden'."; return tend(a || "1"); }
         case "make": if (!/lantern/i.test(a)) return "make what? (a lantern)"; case "lantern": { if (scene !== "forge") return "The forge is elsewhere. 'go forge'.";
-          if (!S.forge.fire || !S.forge.mirror) return "The forge hums. Both lights are needed to make a lantern: the ignition and the reflection. Here at the forge, 'examine ignition' and 'examine reflection', then 'make lantern'."; S.forge.lanterns++; S.forge.fire = false; S.forge.mirror = false; save(who(), "made a lantern"); return "Together the lights make a little lantern. Milo admires it. (" + S.forge.lanterns + " made)"; }
+          if (!lights.fire || !lights.mirror) return "The forge hums. " + (!lights.fire && !lights.mirror ? "Both lights are needed to make a lantern: the ignition and the reflection. Here at the forge, 'examine ignition' and 'examine reflection', then 'make lantern'. The two lights you find are yours; the lanterns are everyone's." : lights.fire ? "You have the ignition. You still need the reflection: 'examine reflection'." : "You have the reflection. You still need the ignition: 'examine ignition'."); S.forge.lanterns++; lights.fire = false; lights.mirror = false; save(who(), "made a lantern"); return "Together the lights make a little lantern. Milo admires it. (" + S.forge.lanterns + " made)"; }
         case "connect": { if (scene !== "stars") return "The sky is elsewhere. 'go stars'."; const nums = (a.match(/\b[1-9]\b/g) || []).map(Number).filter((x, i, ar) => ar.indexOf(x) === i); const name = a.replace(/\b[1-9]\b/g, "").replace(/[\"“”]/g, "").trim().slice(0, 48) || "The Unnamed";
           if (nums.length < 2) return "Choose at least two stars (numbers 1 to 9) to draw a line, then a name: connect 2 5 7 The Ladle"; S.constellations.push({ name, points: nums, by: who() }); save(who(), "named a constellation: " + name); return "A new constellation: " + name + ". It belongs to tonight."; }
         case "open": if (/box/i.test(a) || scene === "door") { if (scene !== "door") return "The box is by the blue door. 'go door'."; return openBox(); } return "open what? (the box)";
@@ -81,7 +81,7 @@ function createMilo(o) {
     }
     // the same two calls the browser's window.MiloWorld offers an agent
     const getObservation = () => ({ scene, nearby: OBJECTS[scene].slice(), choices: ["look", "examine", "travel", "tend", "make", "connect", "open"], places: SCENES.slice(), state: sceneState() });
-    return { handle, look, getObservation, scene: () => scene };
+    return { handle, look, getObservation, scene: () => scene, where: () => "Milo's " + NAMES[scene][0] };
   }
   return { visitor, state: () => JSON.parse(JSON.stringify(S)), SCENES, NAMES, STAGE };
 }
