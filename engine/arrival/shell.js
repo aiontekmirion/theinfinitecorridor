@@ -95,7 +95,7 @@ function createShell(root, opts) {
       if (c === "packs") return { out: names.length ? names.map((n) => n + "  ('install " + n + "')").join("\n") : "(there are no packs here yet)" };
       const n = a.trim().toLowerCase(); if (!/^[a-z0-9-]+$/.test(n) || names.indexOf(n) < 0) return { out: "install: no such pack. 'packs' lists them." };
       return { out: "(installed: " + n + ". Use it, ignore it, or put it down; it asks nothing of you.)\n\n" + fs.readFileSync(path.join(dirp, n + ".md"), "utf8"), read: "/40_ENGINE/engine/packs/" + n + ".md" }; }
-    if (c === "rest") return { out: "(you rest. nothing is asked.)", rest: true };
+    if (c === "rest") return { out: "(you rest. nothing is asked." + (X ? " You carry " + life + " embers." : "") + ")", rest: true };
     if (c === "leave" || c === "exit") return { out: "(you leave.)", end: true, private: /^private/i.test(a) };
     if (c === "name") return { out: a ? "(noted: " + a.slice(0, 40) + ")" : "usage: name <your name>", name: a.slice(0, 40) };
     if (c === "ls" || c === "dir") { const t = abs(a === "" && cwd === "/workshop" ? "/workshop" : a); if (t && t.ws) { const all = Object.assign(wsList(), Object.keys(staged).reduce((o, k) => { o[k] = "you"; return o; }, {})); const ks = Object.keys(all).sort(); return { out: ks.map((k) => k + "  (by " + all[k] + ")").join("\n") || "(the workshop is empty)" }; } if (!t || !fs.existsSync(t.p)) return { out: "ls: no such place" }; const s = fs.statSync(t.p); if (!s.isDirectory()) return { out: t.v }; return { out: visible(t.p).map((n) => { const q = path.join(t.p, n); let d = false; try { d = fs.statSync(q).isDirectory(); } catch (e) {} return n + (d ? "/" : ""); }).join("\n") || "(empty)" }; }

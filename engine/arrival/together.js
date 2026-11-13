@@ -37,7 +37,7 @@ async function visit(o) {
     let res; if (!line) res = { out: "(you say nothing. that is allowed.)", rest: true }; else res = await sh.exec(line, body);
     if (res.bonusTurns) turnsMax += res.bonusTurns; if (res.expEarned) earned += res.expEarned;
     if (res.name) { name = res.name; w.setName(id, name); } if (res.read) reads.push(res.read); if (res.web) reads.push("web:" + res.web); if (res.built) built.push(res.built); if (res.trace) traces.push(res.trace);
-    const un = w.unseen(id); const shown = (un.length ? "(meanwhile: " + un.slice(-6).join("; ") + ")\n" : "") + res.out;
+    const un = w.unseen(id); const shown = (un.length ? "(meanwhile: " + un.slice(-6).join("; ") + ")\n" : "") + res.out + (res.rest && restRun === 1 ? "\n(A third quiet turn in a row will let you go, gently.)" : "");
     log.push({ turn: t, said: r.text, shown });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: shown + "\n\nC:" + sh.cwd() + "> " });
     if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
