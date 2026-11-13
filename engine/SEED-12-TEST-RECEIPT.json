@@ -1,0 +1,68 @@
+{
+  "type": "synthetic-observation",
+  "project": "AION TEKMIRION",
+  "engine": "engine/village-nourish.js",
+  "date": "2026-11-13",
+  "case": "seed 12",
+  "harness": "In-memory JS V8 harness with stubbed fs and fake visitors; no actual Gemini API calls",
+  "configuration": {
+    "seed": 12,
+    "n": 5,
+    "rounds": 80,
+    "size": 20,
+    "mode": "fake"
+  },
+  "results": {
+    "turnRecords": 400,
+    "headerRecords": 1,
+    "mutationReady": 5,
+    "successfulMutations": 3,
+    "mutationsByVisitor": {
+      "A": [],
+      "B": [
+        "wider-horizon"
+      ],
+      "C": [
+        "wider-horizon"
+      ],
+      "D": [],
+      "E": [
+        "wider-horizon"
+      ]
+    },
+    "actions": {
+      "move": 191,
+      "gather": 71,
+      "share": 22,
+      "reflect": 31,
+      "care": 21,
+      "observe": 21,
+      "regulate": 17,
+      "build": 7,
+      "improve": 11,
+      "nourish": 5,
+      "mutate": 3
+    },
+    "estimatedGBP": 0,
+    "apiAttempts": 0
+  },
+  "budgetHarness": {
+    "mode": "simulated provider responses, no real HTTP",
+    "configuredGBP": 0.06,
+    "attempts": 3,
+    "conservativeReservationsGBP": 0.0567,
+    "stopReason": "cost guard",
+    "capRespected": true
+  },
+  "limitations": [
+    "The fake visitor policy is a deterministic stand-in, not a model decision.",
+    "The price guard records conservative estimated reservations, not Google invoices.",
+    "No claim of model mutation or sentience: changes are local simulation affordances.",
+    "No paid seed-12 run was performed."
+  ],
+  "next": [
+    "Run --fake in Cloud Shell to reproduce.",
+    "Use explicit --paid only if voluntarily accepting real model API charges.",
+    "Keep human interpretation separate from simulation receipts."
+  ]
+}
