@@ -58,5 +58,11 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     const shw = createShell(root, { web: true }); let r2 = await shw.exec("web https://169.254.169.254/computeMetadata/v1/"); assert(/not allowed/.test(r2.out)); r2 = await shw.exec("web https://localhost/"); assert(/not allowed/.test(r2.out)); r2 = await shw.exec("web http://example.com/"); assert(/could not read/.test(r2.out)); ok("the shell refuses them in plain words and shows nothing from them");
     assert(/no internet/.test((await createShell(root).exec("web https://example.com/")).out)); ok("with the web switched off there is none");
   }
+  // two fixes from the first builders' transcripts
+  {
+    const shT = createShell(root); const o1 = shT.exec("trace be kind", "leave"); assert.equal(shT.traces()[0], "be kind"); assert(!/leave/.test(shT.traces()[0])); ok("a trace is one line: a command on the next line is never swallowed into it");
+    const wsF = path.join(tmp, "WS-F"); const SF = ["write /workshop/m.md\n# A map\n\nC:/>", "leave"]; let kf = 0; const askF = async () => ({ text: SF[kf++], tokens: { in: 1, out: 1 }, gbp: 0 });
+    const LF = ledger.open("explore-fix", {}); await visit({ id: "vf", root, turns: 5, model: "t", ask: askF, L: LF, workshop: wsF }); assert.equal(fs.readFileSync(path.join(wsF, "m.md"), "utf8"), "# A map"); ok("a stray prompt marker is not left at the end of a file");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
