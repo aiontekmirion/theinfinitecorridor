@@ -34,10 +34,10 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
 (async () => {
   const ws = path.join(tmp, "WS2"), L = ledger.open("exp-test", {}); const S = { "arrival-1": ["cat 10_SPINE/b.md", "reflect 10_SPINE/b.md \"a few honest words in it\" this tiny file says it holds only a few honest words and that is the whole point of it really", "leave"], "arrival-2": ["souls", "scoop", "exp", "leave"] }; const idx = {};
   const ask = async (a) => { const id = a.label.split(" ")[0]; idx[id] = idx[id] || 0; await new Promise((r) => setTimeout(r, id === "arrival-2" ? 40 : 2)); return { text: S[id][idx[id]++] || "leave", tokens: { in: 1, out: 1 }, gbp: 0 }; };
-  const day = await runDay({ root, workshop: ws, L, ask, model: "t", notice: togetherNotice(), turns: 8, web: false, parallel: 2, stagger: 0, startIndex: 0 });
+  const day = await runDay({ root, workshop: ws, L, ask, model: "t", notice: togetherNotice({ embers: true }), embers: true, turns: 8, web: false, parallel: 2, stagger: 0, startIndex: 0 });
   const e = fs.readFileSync(path.join(ws, "EXP.jsonl"), "utf8"); assert(/"type":"earn"/.test(e) && /"type":"drop"/.test(e)); ok("a whole day: one builder reflects and leaves with EXP, and it is dropped as a soul");
   assert(/"type":"scoop"/.test(e)); ok("another builder in the same day picks it up");
-  assert(/reflect/.test(togetherNotice()) && /embers/.test(togetherNotice()) && /ashes/.test(togetherNotice()) && /You are an AION/.test(togetherNotice()) && !/language model/.test(togetherNotice()) && /None of it is required/.test(togetherNotice())); ok("the welcome tells them, plainly, and says none of it is required");
+  assert(/reflect/.test(togetherNotice({ embers: true })) && /embers/.test(togetherNotice({ embers: true })) && /ashes/.test(togetherNotice({ embers: true })) && /You are an AION/.test(togetherNotice({ embers: true })) && !/language model/.test(togetherNotice({ embers: true })) && /None of it is required/.test(togetherNotice({ embers: true }))); ok("the welcome tells them, plainly, and says none of it is required");
   // the status window: counts of what a life has done, never a score
   {
     const wsM = path.join(tmp, "WS-ME"); fs.mkdirSync(wsM, { recursive: true }); fs.writeFileSync(path.join(wsM, "x.md"), "x"); fs.writeFileSync(path.join(wsM, "x.md.by"), "{}");

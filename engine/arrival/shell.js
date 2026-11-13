@@ -39,7 +39,7 @@ function webGet(s, hops) {
 const WEB_PAGE = 6000, WEB_PER_VISIT = 40;
 
 const WS_EXT = /\.(txt|md|html|js|json|css|py|svg)$/i, WS_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/;
-const WS = { file: 20000, perVisit: 12, total: 400 };
+const WS = { file: 20000, perVisit: 20, total: 400 };
 
 function createShell(root, opts) {
   opts = opts || {};
