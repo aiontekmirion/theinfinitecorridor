@@ -30,7 +30,7 @@ async function visit(o) {
   w.join(id);
   const msgs = [{ role: "user", text: "C:/> " }];
   for (let t = 1; t <= turnsMax; t++) {
-    let r; try { r = await o.ask({ system: o.notice, messages: msgs, temperature: 1, maxOutputTokens: o.maxOut || 1500, label: id + " t" + t }); } catch (e) { end = e.ceiling ? "ceiling" : "error: " + String(e.message).slice(0, 80); break; }
+    let r; try { r = await o.ask({ system: o.notice, messages: msgs, temperature: 1, maxOutputTokens: o.maxOut || 1500, label: id + " t" + t, model: o.model }); } catch (e) { end = e.ceiling ? "ceiling" : "error: " + String(e.message).slice(0, 80); break; }
     cost += r.gbp; tin += r.tokens.in || 0; tout += r.tokens.out || 0;
     const rows = r.text.split("\n"), at = rows.findIndex((s) => s.replace(/[`>$\s]/g, "")), line = at < 0 ? "" : rows[at].replace(/^[`>$\s]+|[`\s]+$/g, "");
     const body = rows.slice(at + 1).join("\n").replace(/^\s*```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "").replace(/(\n\s*C:[^\n]*>\s*)+$/i, "");
@@ -55,8 +55,8 @@ async function visit(o) {
 async function runDay(o) {
   fs.mkdirSync(o.workshop, { recursive: true });
   const exp = createExp({ dir: o.workshop }), milo = createMilo({ dir: o.workshop }), letters = createLetters({ dir: o.workshop }), world = createWorld({ workshop: o.workshop }), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const ids = Array.from({ length: o.parallel }, (_, i) => "builder-" + (o.startIndex + i + 1));
-  const results = await Promise.all(ids.map((id, i) => sleep(i * (o.stagger || 0)).then(() => visit(Object.assign({}, o, { id, world, exp, milo, letters })))));
+  const ids = Array.from({ length: o.parallel }, (_, i) => "builder-" + (o.startIndex + i + 1)), models = o.models && o.models.length ? o.models : [o.model];   // one model each, in turn: a village can be of mixed minds
+  const results = await Promise.all(ids.map((id, i) => sleep(i * (o.stagger || 0)).then(() => visit(Object.assign({}, o, { id, world, exp, milo, letters, model: models[(o.startIndex + i) % models.length] })))));
   return { results, notesForSam: world.notesForSam(), letters: results.flatMap((r) => (Array.isArray(r.letters) ? r.letters : [])) };
 }
 module.exports = { createWorld, visit, runDay };

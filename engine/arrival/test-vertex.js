@@ -35,6 +35,9 @@ const srv = http.createServer((req, res) => {
   mode = "expired";
   const flag = path.join(process.env.HOME, "tokflag"); process.env.TOKFLAG = flag; c = createClient({ base, project: "p", capGBP: 5, retryMs: 5, tokenCmd: "node -e \"const f=process.env.TOKFLAG;const fs=require('fs');if(fs.existsSync(f)){console.log('NEW')}else{fs.writeFileSync(f,'');console.log('OLD')}\"" });
   r = await c.ask({ messages: [{ role: "user", text: "hi" }] }); assert.equal(r.text, "hello there"); ok("an expired login (401) fetches a fresh token and tries again, instead of ending the visit");
+  // a model chosen by name needs a stated price, and the stated price is what is charged
+  mode = "normal"; c = createClient({ base, project: "p", token: "T", capGBP: 5 }); assert(!c.hasPrice("new-big-model")); try { await c.ask({ model: "new-big-model", messages: [{ role: "user", text: "hi" }] }); assert.fail("should refuse"); } catch (e) { assert(/no price listed for model new-big-model/.test(e.message) && /--price new-big-model:/.test(e.message)); }
+  c = createClient({ base, project: "p", token: "T", capGBP: 5, prices: { "new-big-model": [2, 10] } }); assert(c.hasPrice("new-big-model")); r = await c.ask({ model: "new-big-model", messages: [{ role: "user", text: "hi" }] }); assert(Math.abs(r.gbp - ((1000 * 2 + 100 * 10) / 1e6) * 0.78) < 1e-9); ok("an unpriced model is refused, and with a stated price the cost is charged at that price");
   L.close({}); const f = L.file || fs.readdirSync(path.join(process.env.HOME, "ledger")).map((x) => path.join(process.env.HOME, "ledger", x))[0];
   assert.equal(ledger.verify(f).ok, true); ok("every call is in the ledger and the hash chain verifies");
   console.log("\nvertex.js: " + n + " checks passed (offline, no model, no cost)"); srv.close(); process.exit(0);

@@ -24,4 +24,8 @@ r = run(["--budget", "0.02", "--publish"]); assert(/village page rebuilt/.test(r
   fs.rmSync(path.join(tmp, "site-work"), { recursive: true }); fs.mkdirSync(path.join(tmp, "site-work")); sh("git init -q -b main", path.join(tmp, "site-work")); sh("git remote add origin /nonexistent/nowhere.git", path.join(tmp, "site-work"));
   r = run(["--state", path.join(tmp, "st-dead"), "--budget", "0.02", "--publish", "--together", "--parallel", "2", "--stagger", "0"]); assert(!/web publishing is LIVE/.test(r.stdout) && /not set up/.test(r.stdout) && /could not push the village page/.test(r.stdout)); ok("when the push fails, it says so, and never claims LIVE");
 }
+{
+  const r3 = cp.spawnSync("node", [path.join(__dirname, "continue.js"), "--root", root, "--state", path.join(tmp, "st-price"), "--together", "--models", "gemini-3.1-flash-lite,mystery-model", "--budget", "5"], { env: Object.assign({}, env, { GOOGLE_CLOUD_PROJECT: "p" }), encoding: "utf8" });
+  assert.equal(r3.status, 2); assert(/No price is listed for: mystery-model/.test(r3.stderr) && /--price <model>:<input>:<output>/.test(r3.stderr)); assert(!fs.existsSync(path.join(tmp, "st-price/state.json"))); ok("an unpriced model stops the runner before anything runs or is spent, and says how to fix it");
+}
 console.log("\ncontinue: " + n + " checks passed (offline, no model, no cost)");
