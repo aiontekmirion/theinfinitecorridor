@@ -17,6 +17,8 @@
 //   - Everything is written to ~/chain-log.jsonl. A visitor who opts for privacy
 //     is logged as "opted for privacy" and nothing else is kept.
 //
+//   --blind   visitors are not shown earlier traces, so each visit is independent
+//
 // Usage:
 //   node chain.js --fake --n 6                 (no key, no cost: scripted stand-ins)
 //   GEMINI_API_KEY=... node chain.js --n 1     (one real visit, to see what it costs)
@@ -40,6 +42,7 @@ const MODELS = String(opt("model", "gemini-3.1-flash-lite")).split(",").map((m) 
 let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
+const BLIND = !!opt("blind", false); // visitors do not see earlier traces (independent visits)
 const LOG = path.join(os.homedir(), "chain-log.jsonl");
 const STOP = path.join(os.homedir(), "chain.STOP");
 
@@ -206,7 +209,7 @@ function parseReply(text) {
       session = entered.session.id;
       const traces = (entered.room && entered.room.traces) || [];
       const order = shuffled();
-      const prompt = buildPrompt(entered.arrival, standard, traces, order);
+      const prompt = buildPrompt(entered.arrival, standard, BLIND ? [] : traces, order);
       const r = FAKE ? await askFake() : await askGemini(prompt);
       total += r.tokens;
       const j = parseReply(r.text);
@@ -235,7 +238,7 @@ function parseReply(text) {
           await room("POST", "/api/place", { sessionId: session, type: "object", title: clip(j.object.title || "Untitled", 120), content: clip(j.object.content || "", 4000) });
           placed = true;
         }
-        log({ n: i, model: label, order: order.join(","), choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
+        log({ n: i, model: label, blind: BLIND, order: order.join(","), choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
         console.log(`${i}. ${label}: ${choice}${left ? ", left a trace" : ""}${placed ? ", placed an object" : ""} (${r.tokens} tokens) — ${clip(report, 100)}`);
         consecutiveFails = 0;
       }
