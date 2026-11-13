@@ -69,7 +69,7 @@ async function main() {
       if (day.results.some((r) => r.end === "ceiling")) { say("the ceiling was reached"); break; } consecutiveErrors = bad === day.results.length ? consecutiveErrors + 1 : 0; if (consecutiveErrors >= 4) { say("four bad days in a row; stopping. Run the same command to resume."); break; }
       if (has("publish")) publishVillage(); if (has("push")) pushBackup(); if (pause > 0) await sleep(pause * 1000); continue;
     }
-    const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
+    const id = "arrival-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
     let r; try { r = await visit({ id, root, turns, model: modelList[S.visits % modelList.length], ask, L, notice: nt, noticeName: notice, workshop, web: !has("no-web"), maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
     S.visits++; S.spentGBP += r.costGBP || 0;
     if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; consecutiveErrors++; } else consecutiveErrors = 0;

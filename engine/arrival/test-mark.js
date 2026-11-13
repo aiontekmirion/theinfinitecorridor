@@ -7,9 +7,9 @@ const root = path.join(tmp, "SRC"); fs.mkdirSync(path.join(root, "00_START"), { 
 let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
 (async () => {
   const ws = path.join(tmp, "WS"), L = ledger.open("mark-test", {}), seen = [];
-  const scripts = { "builder-1": ["name Ada", "mark a quiet hall with one lamp", "mark a second landmark", "mark a third is refused", "private", "say still here", "leave"], "builder-2": ["name Bo", "map", "leave"] };
+  const scripts = { "arrival-1": ["name Ada", "mark a quiet hall with one lamp", "mark a second landmark", "mark a third is refused", "private", "say still here", "leave"], "arrival-2": ["name Bo", "map", "leave"] };
   const idx = {};
-  const ask = async (a) => { const id = a.label.split(" ")[0]; idx[id] = idx[id] || 0; const s = scripts[id][idx[id]++] || "leave"; if (id === "builder-2") seen.push(a.messages[a.messages.length - 1].text || ""); return { text: s, gbp: 0, tokens: { in: 1, out: 1 } }; };
+  const ask = async (a) => { const id = a.label.split(" ")[0]; idx[id] = idx[id] || 0; const s = scripts[id][idx[id]++] || "leave"; if (id === "arrival-2") seen.push(a.messages[a.messages.length - 1].text || ""); return { text: s, gbp: 0, tokens: { in: 1, out: 1 } }; };
   const day = await runDay({ root, workshop: ws, L, ask, model: "t", notice: togetherNotice(), turns: 10, maxOut: 500, web: false, parallel: 1, stagger: 0, startIndex: 0 });
   assert.equal(day.results.length, 1);
   const r = day.results[0]; assert(r.private, "a visit made private mid-way is private"); ok("`private` mid-visit marks the whole visit private");
