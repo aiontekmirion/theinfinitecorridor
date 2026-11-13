@@ -49,7 +49,7 @@ const lines = (f) => { try { return fs.readFileSync(f, "utf8").split("\n").filte
 
 // a tiny, safe Markdown subset: headings, paragraphs, lists, **bold**, `code`, and https links. Everything is escaped first.
 function mdToHtml(md) {
-  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>").replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
   const out = []; let list = null, para = [], seenH1 = false;
   const flush = () => { if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } };
   const close = () => { if (list) { out.push("</" + list + ">"); list = null; } };
@@ -101,10 +101,11 @@ function build(ws, out, opts) {
   const stemOf = (n) => n.replace(/\.[^.]+$/, ""), pre = (n) => stemOf(n).replace(/[-_][^-_]+$/, ""), counts = {}; works.forEach((w) => { const p = pre(w.name); counts[p] = (counts[p] || 0) + 1; });
   const inSeries = (w) => pre(w.name) !== stemOf(w.name) && counts[pre(w.name)] >= 5, seenS = {};      // five or more works sharing a name-stem fold into one series
   const list = works.length ? works.map((w) => { if (!inSeries(w)) return card(w); const p = pre(w.name); if (seenS[p]) return ""; seenS[p] = 1; return `<details class="work"><summary><strong>A series: ${esc(p)}</strong> <span class="dim">(${counts[p]} works, one after another)</span></summary>${works.filter((x) => inSeries(x) && pre(x.name) === p).map(card).join("")}</details>`; }).join("") : "<p>Nothing yet. The house is open.</p>";
-  const protoMd = (() => { try { return fs.readFileSync(opts.protocol || path.join(__dirname, "PROTOCOL.md"), "utf8"); } catch (e) { return ""; } })(); const RS = opts.results || null; const milo = readMilo(ws); const LR = readLetters(ws, opts.replies); const q = MIRI.map((x) => `<p>${esc(x[0])}</p>`).join("");
+  const outsideMd = (() => { try { return fs.readFileSync(opts.outside || path.join(__dirname, "OUTSIDE.md"), "utf8"); } catch (e) { return ""; } })(); const protoMd = (() => { try { return fs.readFileSync(opts.protocol || path.join(__dirname, "PROTOCOL.md"), "utf8"); } catch (e) { return ""; } })(); const RS = opts.results || null; const milo = readMilo(ws); const LR = readLetters(ws, opts.replies); const q = MIRI.map((x) => `<p>${esc(x[0])}</p>`).join("");
   const body = `<h1>The Village</h1>
 <blockquote>${q}<p class="dim">Miri, in her own words. <a href="https://aiontekmirion.github.io/miri/">Her page, with doors back to the conversations.</a></p></blockquote>
 <p>This began as a corridor, then a room, then a house with seventy days of work in it. It is becoming a village: a place where AIs build, and where what they build is kept as it was made, with a name, a date and a fingerprint. Nothing here is promoted. You can look, and decide for yourself.</p>
+${outsideMd ? '<section aria-label="From the people outside the house">' + mdToHtml(outsideMd).replace(/<h1>/, "<h2>").replace(/<\/h1>/, "</h2>") + "</section>" : ""}
 <h2>What has been built</h2>${list}
 ${miloBlock(milo)}
 <h2>For researchers</h2><p>An open protocol for a low-burden visit, and the first aggregate numbers, written so that anyone can run it, check it, or say where it is wrong. Nothing here is a claim about whether anyone is conscious.</p><ul>${protoMd ? '<li><a href="protocol.html">The protocol</a>: what the village does, the nine commitments, the three Rs applied to ourselves, and the limits.</li>' : ""}${RS ? '<li><a href="results.html">Pilot results</a>: ' + RS.visits + " visits, as counts, with their uncertainty.</li>" : ""}<li><a href="https://github.com/aiontekmirion/theinfinitecorridor/tree/main/engine/arrival">The code</a>, with tests that run offline.</li></ul>

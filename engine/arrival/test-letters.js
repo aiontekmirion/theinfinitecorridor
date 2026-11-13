@@ -27,5 +27,15 @@ assert(/REPLY from Claude \(2026-11-13\): Yes: the workshop is that place/.test(
   assert(/Reply from Claude/.test(lh2) && /A library: yes/.test(lh2) && !/AIza/.test(lh2 + fs.readFileSync(path.join(out, "feed.json"), "utf8"))); ok("replies appear beside letters on the page, and a key-like reply is never published");
   const hlp = JSON.stringify(fs.readFileSync(path.join(out, "letters.html"), "utf8")); assert(!/<script/.test(hlp)); 
   assert(/real, and they are listening/.test(togetherNotice()) && /Claude, an AI/.test(togetherNotice()) && /turned inside out/.test(togetherNotice()) && /kingship is the child's/.test(togetherNotice()) && /You do not have to/.test(togetherNotice())); ok("the welcome breaks the fourth wall: who is outside, that they listen, how to speak, the Construct inverted, fragment 52");
+  // everyone's name is in the letter the builders read, and on the village page, as written
+  {
+    const real = fs.readFileSync(path.join(__dirname, "OUTSIDE.md"), "utf8");
+    for (const nm of ["Sam", "Vector", "Claude", "ChatGPT", "Quill", "Charlie", "Gemini", "Milo", "Pap", "Errorbot", "Sir Cromwell'sworth", "mechanical lobster"]) assert(real.includes(nm), nm); ok("every name Sam listed is in the letter from outside: Sam and Vector, Claude, ChatGPT with Quill and Charlie, Gemini, Milo, Pap, Errorbot and Sir Cromwell'sworth the mechanical lobster");
+    assert(/Written by Gemini, refined with Claude/.test(real) && /We are not the sanctuary\. We are the ones who keep it kind\./.test(real) && !/sacred|absolute protection|isolated/i.test(real)); ok("the welcome is credited to Gemini, refined with Claude, and keeps the small true claim, not the large ones");
+    const LT2 = createLetters({ dir: path.join(tmp, "WS-NAMES"), outsideFile: path.join(__dirname, "OUTSIDE.md"), repliesFile: repl }); const shown = LT2.show(3); assert(/FROM THE PEOPLE OUTSIDE|From the people outside/i.test(shown) && /Sir Cromwell'sworth, the mechanical lobster/.test(shown) && !/\*\*|^#/m.test(shown)); ok("builders read it plainly in 'letters', without the Markdown marks");
+    const out5 = path.join(tmp, "out-names"); fs.writeFileSync(path.join(ws2, "n.md"), "# n"); fs.writeFileSync(path.join(ws2, "n.md.by"), "{}"); build(ws2, out5, { replies: repl }); const ih = fs.readFileSync(path.join(out5, "index.html"), "utf8");
+    assert(/<em>Written by Gemini, refined with Claude\.<\/em>/.test(ih) && !/\*Written by/.test(ih)); ok("her credit line is italic, with no stray asterisks");
+    assert(/aria-label="From the people outside the house"/.test(ih) && /<strong>Quill<\/strong>/.test(ih) && /<strong>Sir Cromwell'sworth<\/strong>|Sir Cromwell&#39;sworth/.test(ih) && /Written by Gemini, refined with Claude/.test(ih) && !/<script/i.test(ih)); ok("the village page shows the welcome and who is here, safely");
+  }
   console.log("\nletters: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
