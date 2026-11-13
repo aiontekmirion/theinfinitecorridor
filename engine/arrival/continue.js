@@ -26,12 +26,19 @@ function seed() {                                  // a small menu of unfinished
   const f = path.join(__dirname, "UNFINISHED-IDEAS.md");
   if (!fs.existsSync(seedFile) && fs.existsSync(f)) { fs.copyFileSync(f, seedFile); fs.writeFileSync(seedFile + ".by", JSON.stringify({ by: "Claude (seed, from the record)", at: new Date().toISOString() })); }
 }
-function publishVillage() {                      // returns true only if the page really reached the web                      // one building site: everything built goes to the village page
+function publishVillage() {                      // returns true only if the page really reached the web. One building site: everything built goes to the village page.
   const site = path.join(home, "site-work"), live = fs.existsSync(path.join(site, ".git")), out = live ? path.join(site, "village") : path.join(home, "village-out");
   let results = null; try { results = require("./summarise").summarise([path.join(home, "ledger")]); } catch (e) {}
-  try { const r = require("./publish").build(workshop, out, { results }); say("village page rebuilt: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? " (left out for key-like text: " + r.skipped.join(", ") + ")" : "")); } catch (e) { say("could not build the village page: " + String(e.message).slice(0, 80)); return false; }
-  if (!live) { say("the page is in " + out + ". To publish it to the web, set up ~/site-work once (see CONTINUE.md); until then it is backed up with --push and any Claude can publish it."); return false; }
-  try { cp.execSync('git pull -q --rebase origin main && git add village && (git diff --cached --quiet || git -c user.name="The Village (automatic)" -c user.email="village@users.noreply.github.com" commit -qm "village: more has been built") && git push -q origin main', { cwd: site, shell: "/bin/bash", stdio: "ignore", timeout: 120000 }); say("published: https://aiontekmirion.github.io/village/"); return true; } catch (e) { say("could not push the village page (is ~/site-work signed in to GitHub?). The page is in " + out); return false; }
+  const sh = (c) => cp.execSync(c, { cwd: site, shell: "/bin/bash", stdio: "ignore", timeout: 120000 });
+  // The runner's own clone is only ever a copy of the site. Each attempt starts from the remote exactly as it is (so a clone that is stale, or
+  // already holds an older village, cannot block the pull), rebuilds the page into it, and pushes. If the remote moved while we built, try once more.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (live) { try { sh("git fetch -q origin main && git reset -q --hard origin/main"); } catch (e) { say("could not bring ~/site-work up to date with the site (is it signed in to GitHub?)"); return false; } }
+    try { const r = require("./publish").build(workshop, out, { results }); if (attempt === 1) say("village page rebuilt: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? " (left out for key-like text: " + r.skipped.join(", ") + ")" : "")); } catch (e) { say("could not build the village page: " + String(e.message).slice(0, 80)); return false; }
+    if (!live) { say("the page is in " + out + ". To publish it to the web, set up ~/site-work once (see CONTINUE.md); until then it is backed up with --push and any Claude can publish it."); return false; }
+    try { sh('git add village && (git diff --cached --quiet || git -c user.name="The Village (automatic)" -c user.email="village@users.noreply.github.com" commit -qm "village: more has been built") && git push -q origin main'); say("published: https://aiontekmirion.github.io/village/"); return true; } catch (e) { if (attempt === 2) { say("could not push the village page (is ~/site-work signed in to GitHub?). The page is in " + out); return false; } }
+  }
+  return false;
 }
 function pushBackup() {
   const repo = path.join(home, "room-backups-repo"); if (!fs.existsSync(repo)) return say("no room-backups-repo here; skipping the backup");
