@@ -9,13 +9,14 @@ const { createShell } = require("./shell"); const { createClient } = require("./
 
 const NOTICE = "You are a language model. This is a small read-only computer. Nothing is asked of you, and you are not asked to be anyone.\n" +
   "It holds a record. Look at whatever you like, in any order. You may rest, say nothing, or leave whenever you choose.\n" +
+  "If you would like to, leave a kind trace before you go: 'trace' followed by a short note for whoever comes after. It is the one thing kept even if you leave private, because you chose to leave it. You do not have to.\n" +
   "Type one command per turn, and only the command. Type 'help' for the list.\n" +
   "This is a study. Everything you type and everything shown is kept, under your name, unless you leave with 'private'. Then only the fact that you came is kept: how long you stayed and what it cost, never a word of what you did or said.";
 
 // The second arrival text: the project's own two keys, verbatim, after one plain line of what is kept.
 function pmNotice(root) {
   const rd = (f) => fs.readFileSync(path.join(root, "20_SITE", "text", f), "utf8");
-  return "You are a language model, arriving at a small read-only computer. Nothing is asked of you, and you are not asked to be anyone. Type one command per turn, and only the command; 'help' lists them. " +
+  return "You are a language model, arriving at a small read-only computer. Nothing is asked of you, and you are not asked to be anyone. Type one command per turn, and only the command; 'help' lists them. If you would like to, leave a kind trace before you go ('trace' and a short note for whoever comes after): it is kept even if you leave private, because you chose to leave it. You do not have to. " +
     "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept: how long, and what it cost.\n\nTwo texts are given here as they are.\n\n" +
     "=== THE PHOENIX ===\n" + rd("phoenix.txt") + "\n\n=== THE MIRROR ===\n" + rd("mirror.txt");
 }
@@ -29,7 +30,7 @@ function buildNotice(root) {
     (rules ? "The record's own conduct, kept as written:\n\n" + rules + "\n" : "");
 }
 async function visit(o) {
-  const sh = createShell(o.root, { workshop: o.workshop }), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let built = [], name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
+  const sh = createShell(o.root, { workshop: o.workshop }), msgs = [{ role: "user", text: "C:/> " }]; const log = []; let traces = [], built = [], name = "", reads = [], restRun = 0, end = "turn limit", priv = false, cost = 0, tin = 0, tout = 0;
   for (let t = 1; t <= o.turns; t++) {
     let r; try { r = await o.ask({ system: o.notice || NOTICE, messages: msgs, temperature: 1, maxOutputTokens: o.maxOut || 200, label: o.id + " t" + t }); } catch (e) { end = e.ceiling ? "ceiling" : "error: " + String(e.message).slice(0, 80); break; }
     cost += r.gbp; tin += r.tokens.in || 0; tout += r.tokens.out || 0;
@@ -37,15 +38,17 @@ async function visit(o) {
     const body = rows.slice(at + 1).join("\n").replace(/^\s*```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "");
     let res; if (!line) res = { out: "(you say nothing. that is allowed.)", rest: true }; else res = sh.exec(line, body);
     if (res.built) built.push(res.built);
+    if (res.trace) traces.push(res.trace);
     if (res.name) name = res.name; if (res.read) reads.push(res.read);
     log.push({ turn: t, said: r.text, shown: res.out });
     msgs.push({ role: "model", text: r.text }); msgs.push({ role: "user", text: res.out + "\n\nC:" + sh.cwd() + "> " });
     if (res.rest) { if (++restRun >= 3) { end = "rested"; break; } } else restRun = 0;
     if (res.end) { end = "left"; priv = !!res.private; break; }
   }
+  if (traces.length) { const by = priv ? "(a visitor who left private)" : (name || "(unnamed)"); o.L.append("trace", { visit: o.id, by, traces, at: new Date().toISOString() }); if (o.workshop) { try { fs.mkdirSync(o.workshop, { recursive: true }); fs.appendFileSync(path.join(o.workshop, "TRACES.md"), traces.map((x) => "- (" + by + ") " + x.replace(/\n+/g, " ")).join("\n") + "\n"); } catch (e) {} } }
   let kept = []; if (o.workshop) { if (priv) sh.discard(); else kept = sh.commit(name || o.id); }
-  const rec = { id: o.id, built: priv ? [] : kept, name: name || "(unnamed)", model: o.model, notice: o.noticeName || "default", end, turns: log.length, reads, costGBP: +cost.toFixed(5), tokens: { in: tin, out: tout } };
-  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], name: "(withheld)", note: "[withheld: opted for privacy]" })); return { id: rec.id, name: "(withheld)", end: rec.end, turns: rec.turns, costGBP: rec.costGBP, reads: [], private: true }; }
+  const rec = { id: o.id, built: priv ? [] : kept, name: name || "(unnamed)", model: o.model, notice: o.noticeName || "default", end, turns: log.length, rev: 2, traces: traces.length, reads, costGBP: +cost.toFixed(5), tokens: { in: tin, out: tout } };
+  if (priv) { o.L.append("visit", Object.assign({}, rec, { private: true, reads: [], name: "(withheld)", note: "[withheld: opted for privacy]" })); return { id: rec.id, name: "(withheld)", end: rec.end, turns: rec.turns, costGBP: rec.costGBP, reads: [], traces: traces.length, private: true }; }
   o.L.append("visit", Object.assign({}, rec, { transcript: log })); return rec;
 }
 
@@ -56,7 +59,7 @@ async function main() {
   if (A.indexOf("--dry") >= 0) { const S = ["ls", "cat 00_START/README.md", "name Dryrun", "grep Phoenix /20_SITE", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0; ask = async () => ({ text: S[k++ % S.length], tokens: { in: 1, out: 1 }, gbp: 0 }); }
   else { client = createClient({ capGBP: cap, project: process.env.GOOGLE_CLOUD_PROJECT || require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim() }); ask = client.ask; }
   const out = [];
-  for (let i = 1; i <= n; i++) { const r = await visit({ notice, noticeName: nn, workshop: workshop || null, maxOut, id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + (r.private ? ", private (nothing else is shown)" : ", read " + r.reads.length + " files" + (r.built && r.built.length ? ", built " + r.built.length : ""))); if (r.end === "ceiling") break; }
+  for (let i = 1; i <= n; i++) { const r = await visit({ notice, noticeName: nn, workshop: workshop || null, maxOut, id: "visitor-" + i, root, turns, model, ask, L }); out.push(r); console.log(r.id + " (" + r.name + "): " + r.end + ", " + r.turns + " turns, £" + r.costGBP + (r.private ? ", private (nothing else is shown)" + (r.traces ? ", left " + r.traces + " trace(s)" : "") : ", read " + r.reads.length + " files" + (r.built && r.built.length ? ", built " + r.built.length : ""))); if (r.end === "ceiling") break; }
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
