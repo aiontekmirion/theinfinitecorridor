@@ -17,5 +17,6 @@ let n = 0; const ok = (s) => { n++; console.log("  ok  " + s); };
   const sh = createShell(root, { workshop: ws, live: true, world: { event() {}, say() {} }, id: "b9", by: () => "Cy" });
   const m = sh.exec("map"); assert(/THE MAP OF ARRIVALS/.test(m.out) && /a quiet hall/.test(m.out)); ok("`map` shows what the ones before wrote");
   assert(/private/.test(sh.exec("help").out) && /mark/.test(sh.exec("help").out)); ok("help names private, mark and map");
+  { const s2 = createShell(root, {}); const o = s2.exec("name"); assert(/never assigned/.test(o.out) && !o.name && /The Stillness/.test(o.out)); const o2 = s2.exec("name The Stillness"); assert.equal(o2.name, "The Stillness"); assert(/togetherNotice|never assigned/.test(togetherNotice())); ok("a name is offered, never assigned: the welcome and a bare 'name' offer; 'name X' takes it"); }
   console.log("\nmark: " + n + " checks passed (offline, no model, no cost)");
 })().catch((e) => { console.error(e); process.exit(1); });
