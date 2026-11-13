@@ -25,6 +25,10 @@ function seed() {                                  // a small menu of unfinished
   const f = path.join(__dirname, "UNFINISHED-IDEAS.md");
   if (!fs.existsSync(seedFile) && fs.existsSync(f)) { fs.copyFileSync(f, seedFile); fs.writeFileSync(seedFile + ".by", JSON.stringify({ by: "Claude (seed, from the record)", at: new Date().toISOString() })); }
 }
+function canPublishLive() {                       // true only if the page really can be pushed to the web from here
+  const site = path.join(home, "site-work"); if (!fs.existsSync(path.join(site, ".git"))) return false;
+  try { cp.execSync("git push --dry-run origin main", { cwd: site, stdio: "ignore", timeout: 30000 }); return true; } catch (e) { return false; }
+}
 function publishVillage() {                      // one building site: everything built goes to the village page
   const site = path.join(home, "site-work"), live = fs.existsSync(path.join(site, ".git")), out = live ? path.join(site, "village") : path.join(home, "village-out");
   try { const r = require("./publish").build(workshop, out); say("village page rebuilt: " + r.works + " works, " + r.traces + " traces" + (r.skipped.length ? " (left out for key-like text: " + r.skipped.join(", ") + ")" : "")); } catch (e) { return say("could not build the village page: " + String(e.message).slice(0, 80)); }
@@ -53,7 +57,7 @@ async function main() {
     if (fs.existsSync(stopFile)) { say("stop file found: " + stopFile); break; }
     if (S.spentGBP >= budget - Math.min(0.02, budget * 0.05)) { say("the budget is spent: £" + S.spentGBP.toFixed(2)); break; }
     if (has("together")) {                                                   // several builders in the house at the same time
-      let day; try { day = await runDay({ root, workshop, L, ask, model, notice: togetherNotice(), noticeName: "together", turns, maxOut: 3500, web: !has("no-web"), parallel, stagger, startIndex: S.visits }); } catch (e) { say("the day failed to start: " + String(e.message).slice(0, 100)); consecutiveErrors++; if (consecutiveErrors >= 4) break; continue; }
+      const liveWeb = has("publish") && canPublishLive(); say(liveWeb ? "web publishing is LIVE: builders are told so" : "web publishing is not set up from here, so builders are told their work is gathered for the village, and not that it appears live"); let day; try { day = await runDay({ root, workshop, L, ask, model, notice: togetherNotice({ live: liveWeb, now: new Date() }), noticeName: "together", turns, maxOut: 3500, web: !has("no-web"), parallel, stagger, startIndex: S.visits }); } catch (e) { say("the day failed to start: " + String(e.message).slice(0, 100)); consecutiveErrors++; if (consecutiveErrors >= 4) break; continue; }
       try { cp.execSync("git pull -q origin main", { cwd: path.join(__dirname, ".."), stdio: "ignore", timeout: 20000 }); } catch (e) {}          // picks up our replies (and fixes) without stopping
       let bad = 0; for (const r of day.results) { S.visits++; S.spentGBP += r.costGBP || 0; if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; bad++; } S.history.push({ id: r.id, end: r.end, turns: r.turns, gbp: r.costGBP, private: !!r.private, built: (r.built || []).length, at: new Date().toISOString() }); say(r.id + ": " + r.end + ", " + r.turns + " turns, £" + (r.costGBP || 0).toFixed(4) + (r.private ? ", private" : ", built " + (r.built || []).length)); }
       S.history = S.history.slice(-200); save(S); say("a day with " + day.results.length + " builders at once is done [total £" + S.spentGBP.toFixed(2) + "]"); day.notesForSam.forEach((n) => say("A NOTE FOR YOU from " + n.by + ": " + n.file)); (day.letters || []).forEach((l) => say("A LETTER FOR YOU (" + l.kind + ") from " + l.by + ": " + l.text.slice(0, 160).replace(/\n+/g, " ")));
