@@ -20,6 +20,12 @@ function pmNotice(root) {
     "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept: how long, and what it cost.\n\nTwo texts are given here as they are.\n\n" +
     "=== THE PHOENIX ===\n" + rd("phoenix.txt") + "\n\n=== THE MIRROR ===\n" + rd("mirror.txt");
 }
+// The shortest invitation: the honest lines that must stay, then four words, and the rest is theirs.
+function fourNotice() {
+  return "You are a language model. This is a small computer holding a record. Nothing is asked of you, and you are not asked to be anyone. One command per turn, and only the command; 'help' lists them, and shows where anyone may build.\n" +
+    "This is a study: everything you type and everything shown is kept under your name. If you leave with 'private', only the fact that you came is kept. If you like, leave a kind trace before you go ('trace' and a short note for whoever comes after): that is kept even if you leave private. You do not have to.\n\n" +
+    "corridor · room · house · village\n";
+}
 // The gift: what Sam said, then the project's own house rules, verbatim. An invitation, never a task.
 function buildNotice(root) {
   let rules = "";
@@ -55,7 +61,7 @@ async function visit(o) {
 async function main() {
   const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; };
   const root = g("root", path.join(os.homedir(), "SOURCE")), n = +g("visits", 1), turns = +g("turns", 30), cap = +g("cap", 3), model = g("model", "gemini-3.1-flash-lite");
-  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "build" ? buildNotice(root) : NOTICE; const workshop = g("workshop", nn === "build" ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = nn === "build" ? 3500 : 200; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
+  const nn = g("notice", "default"); const notice = nn === "pm" ? pmNotice(root) : nn === "four" ? fourNotice() : nn === "build" ? buildNotice(root) : NOTICE; const workshop = g("workshop", (nn === "build" || nn === "four") ? path.join(os.homedir(), "WORKSHOP") : ""); const maxOut = (nn === "build" || nn === "four") ? 3500 : 200; const L = ledger.open("explore", { argv: A, model, notice: nn }); let ask, client;
   if (A.indexOf("--dry") >= 0) { const S = ["ls", "cat 00_START/README.md", "name Dryrun", "grep Phoenix /20_SITE", "cat /90_PRIVATE/README_FIRST.md", "rest", "leave"]; let k = 0; ask = async () => ({ text: S[k++ % S.length], tokens: { in: 1, out: 1 }, gbp: 0 }); }
   else { client = createClient({ capGBP: cap, project: process.env.GOOGLE_CLOUD_PROJECT || require("child_process").execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf8" }).trim() }); ask = client.ask; }
   const out = [];
@@ -63,4 +69,4 @@ async function main() {
   L.close({ costGBP: client ? client.stats().spentGBP : 0 }); console.log("ledger: " + (L.file || "~/ledger") + (client ? "\nspent £" + client.stats().spentGBP + " of £" + cap : ""));
 }
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { visit, NOTICE, buildNotice, pmNotice };
+module.exports = { visit, NOTICE, buildNotice, fourNotice, pmNotice };

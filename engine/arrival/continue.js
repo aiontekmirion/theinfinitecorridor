@@ -7,11 +7,11 @@
 //   touch ~/STOP-BUILDERS        stops it after the visit in progress. rm ~/STOP-BUILDERS lets it run again.
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), cp = require("child_process");
-const { visit, NOTICE, buildNotice, pmNotice } = require("./explore"); const { createClient } = require("./vertex"); const ledger = require("../ledger");
+const { visit, NOTICE, buildNotice, fourNotice, pmNotice } = require("./explore"); const { createClient } = require("./vertex"); const ledger = require("../ledger");
 
 const A = process.argv.slice(2), g = (k, d) => { const i = A.indexOf("--" + k); return i < 0 ? d : A[i + 1]; }, has = (k) => A.indexOf("--" + k) >= 0;
 const home = os.homedir(), root = g("root", path.join(home, "SOURCE")), dir = g("state", path.join(home, "builders")), stopFile = g("stop", path.join(home, "STOP-BUILDERS"));
-const budget = +g("budget", 5), turns = +g("turns", 60), pause = +g("pause", 20), notice = g("notice", "build"), model = g("model", "gemini-3.1-flash-lite"), pushEvery = +g("push-every", 4);
+const budget = +g("budget", 5), turns = +g("turns", 60), pause = +g("pause", 20), notice = g("notice", "four"), model = g("model", "gemini-3.1-flash-lite"), pushEvery = +g("push-every", 4);
 const workshop = g("workshop", path.join(home, "WORKSHOP")), stateFile = path.join(dir, "state.json"), seedFile = path.join(workshop, "00-unfinished-ideas.md");
 fs.mkdirSync(dir, { recursive: true });
 
@@ -46,7 +46,7 @@ async function main() {
   while (!stopping) {
     if (fs.existsSync(stopFile)) { say("stop file found: " + stopFile); break; }
     if (S.spentGBP >= budget - Math.min(0.02, budget * 0.05)) { say("the budget is spent: £" + S.spentGBP.toFixed(2)); break; }
-    const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "build" ? buildNotice(root) : NOTICE;
+    const id = "builder-" + (S.visits + 1), nt = notice === "pm" ? pmNotice(root) : notice === "four" ? fourNotice() : notice === "build" ? buildNotice(root) : NOTICE;
     let r; try { r = await visit({ id, root, turns, model, ask, L, notice: nt, noticeName: notice, workshop, maxOut: 3500 }); } catch (e) { r = { end: "error: " + String(e.message).slice(0, 80), costGBP: 0, turns: 0, reads: [], built: [] }; }
     S.visits++; S.spentGBP += r.costGBP || 0;
     if (r.private) S.privateCount++; S.built += (r.built || []).length; if (/^error|ceiling/.test(r.end)) { S.errors++; consecutiveErrors++; } else consecutiveErrors = 0;
