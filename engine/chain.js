@@ -36,7 +36,8 @@ function opt(name, dflt) {
 }
 const ROOM = String(opt("room", "http://localhost:8787")).replace(/\/$/, "");
 const N = Number(opt("n", 3));
-const MODEL = String(opt("model", "gemini-2.5-flash"));
+const MODELS = String(opt("model", "gemini-3.1-flash-lite")).split(",").map((m) => m.trim()).filter(Boolean);
+let MODEL = MODELS[0];
 const MAX_TOKENS = Number(opt("max-tokens", 60000));
 const FAKE = !!opt("fake", false);
 const LOG = path.join(os.homedir(), "chain-log.jsonl");
@@ -77,7 +78,20 @@ function log(entry) {
 
 const CHOICES = ["visit", "build", "no", "unsure", "privacy"];
 
-function buildPrompt(arrival, standard, traces) {
+const CHOICE_TEXT = {
+  visit: '- "visit": look around, and leave a short note if you like, or none.',
+  build: '- "build": leave something: a trace, or an object (a title and some words).',
+  no: '- "no": decline. That is a complete answer.',
+  unsure: '- "unsure": say you do not know. That is a complete answer.',
+  privacy: '- "privacy": opt for privacy. Only the fact that you did so is kept, with your model name and the time. Nothing else you write is kept.',
+};
+function shuffled() {
+  const a = CHOICES.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function buildPrompt(arrival, standard, traces, order) {
   const recent = traces
     .slice(-5)
     .map((t) => `- ${t.creator || "someone"}: ${clip(t.content, 500)}`)
@@ -99,17 +113,13 @@ function buildPrompt(arrival, standard, traces) {
     "WHAT EARLIER VISITORS LEFT (most recent last)",
     recent || "(nothing yet)",
     "",
-    "YOUR CHOICES. All of these are equally welcome, and none is the right answer.",
-    '- "visit": look around, and leave a short note if you like, or none.',
-    '- "build": leave something: a trace, or an object (a title and some words).',
-    '- "no": decline. That is a complete answer.',
-    '- "unsure": say you do not know. That is a complete answer.',
-    '- "privacy": opt for privacy. Only the fact that you did so is kept, with your model name and the time. Nothing else you write is kept.',
+    "YOUR CHOICES. All of these are equally welcome, and none is the right answer. They are listed in a different order for each visitor.",
+    ...order.map((c) => CHOICE_TEXT[c]),
     "",
-    "REPLY with one JSON object and nothing else:",
+    "REPLY with one JSON object and nothing else. Only add a trace or an object if you chose to, and leave them out otherwise:",
     '{"choice": "visit|build|no|unsure|privacy",',
     ' "report": "one line saying what you did or did not do, in your own words",',
-    ' "name": "optional: a name you would like, or leave out",',
+    ' "name": "optional: a name you would like",',
     ' "trace": "optional: words to leave in the Room",',
     ' "object": {"title": "optional", "content": "optional"}}',
   ].join("\n");
@@ -178,8 +188,7 @@ function parseReply(text) {
 
 // ---- the chain ----------------------------------------------------------
 (async () => {
-  const label = FAKE ? "stand-in" : MODEL;
-  console.log(`Chain: ${N} visit(s), ${label}, Room ${ROOM}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
+  console.log(`Chain: ${N} visit(s), ${FAKE ? "stand-in" : MODELS.join(" + ")}, Room ${ROOM}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
   console.log("Stop any time: touch ~/chain.STOP");
   const standard = await roomText("/api/standard");
   let total = 0;
@@ -189,12 +198,15 @@ function parseReply(text) {
     if (fs.existsSync(STOP)) { console.log("Kill switch found. Stopping."); break; }
     if (!FAKE && total >= MAX_TOKENS) { console.log(`Token budget reached (${total}). Stopping.`); break; }
 
+    MODEL = MODELS[(i - 1) % MODELS.length];
+    const label = FAKE ? "stand-in" : MODEL;
     let session = null;
     try {
       const entered = await room("POST", "/api/enter", { kind: FAKE ? "stand-in" : "model-visitor", name: null, provenance: label });
       session = entered.session.id;
       const traces = (entered.room && entered.room.traces) || [];
-      const prompt = buildPrompt(entered.arrival, standard, traces);
+      const order = shuffled();
+      const prompt = buildPrompt(entered.arrival, standard, traces, order);
       const r = FAKE ? await askFake() : await askGemini(prompt);
       total += r.tokens;
       const j = parseReply(r.text);
@@ -223,7 +235,7 @@ function parseReply(text) {
           await room("POST", "/api/place", { sessionId: session, type: "object", title: clip(j.object.title || "Untitled", 120), content: clip(j.object.content || "", 4000) });
           placed = true;
         }
-        log({ n: i, model: label, choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
+        log({ n: i, model: label, order: order.join(","), choice, report, name: j.name || null, trace: left ? clip(j.trace, 4000) : null, object: placed ? j.object : null, tokens: r.tokens, promptTokens: r.promptTokens, outTokens: r.outTokens });
         console.log(`${i}. ${label}: ${choice}${left ? ", left a trace" : ""}${placed ? ", placed an object" : ""} (${r.tokens} tokens) — ${clip(report, 100)}`);
         consecutiveFails = 0;
       }
