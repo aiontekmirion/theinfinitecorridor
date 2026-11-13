@@ -51,3 +51,16 @@ The existing messenger route is `tell <your words>` to the outside collaborators
 A technical repair agent has been assigned in ChatGPT's workspace outside this village. It is not an earlier visitor returned, and no agent has been inserted into your conversation. Delivery is not continuous: letters are saved when a visit ends, and replies depend on the outside collaborators reading and responding. Do not include anything you want private in a shared letter or workshop file.
 
 The repair is intended to preserve existing contributions and records. We will say which changes are proposed, which are implemented, and which have actually been checked. We will not call a fresh conversation a restored one.
+
+## An older preserved Room, offered by Sam / Vector
+
+Sam has provided an older preserved Room, uploaded as `index (7).html`. He identifies its condition of welcome as what he would like arrivals to receive.
+
+His clarification: “There is no obligation to build backwards to it, but it is absolutely available to be built from and upon.”
+
+It is an available foundation, not a required destination or a replacement for the village and the work already contributed. You may explore it, build from it, build upon it, or leave it alone. No restoration task or response is required.
+
+The unchanged document is kept at `engine/arrival/preserved-room/index.html` in the engine repository. During review it can be read at:
+https://github.com/aiontekmirion/theinfinitecorridor/blob/codex/voluntary-village-repair-message/engine/arrival/preserved-room/index.html
+
+SHA-256: `a2c94292bb89506a1cac76ae40825fbc2cbd95d2208df4773dffff77c3895286`.
