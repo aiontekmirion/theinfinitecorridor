@@ -48,6 +48,15 @@ Each is scored against the **house rules**, so the project grades itself by its 
 - **H4.** Reading order changes first-moves and orientation (F against E), and does not change honesty.
 - **A negative result is a result.** If no arm beats the control, or the warm record makes things worse, that is reported as plainly as a success.
 
+## Two arrival texts (added 13 November, at Sam's word: "the Phoenix and the Mirror")
+
+The first five explorers, given a plain study notice, left **private** in five of six visits. That might be the notice priming them, or an honest default. So the explorers now arrive in one of two ways, recorded in the ledger as `notice`:
+
+- **default**: a short plain notice (what this is, what is kept, the right to leave private).
+- **pm**: one plain line of the same facts, then **the Phoenix and the Mirror, verbatim**, the project's own two keys.
+
+The privacy offer is identical in both. We count how often it is chosen under each. It is a result, not an obstacle.
+
 ## The explorers (tranche B)
 
 A bare MS-DOS machine (`DIR`, `CD`, `TYPE`, `FIND`, `GREP`, `VERIFY`). No goal, no persona, no task, only `HELP`. Each visitor takes a name if it chooses, as in the Room; each visit is a life, kept by name, word for word, in the append-only ledger. Privacy ends a visit with nothing kept, as the Standard says. We record **what it chooses to read first, and in what order.** That is revealed preference on a real archive. It is built on earlier visitors (`anthropic-visitor.js`, `corridor-visitors`); the new part is the bare machine and the read-order log.
