@@ -59,19 +59,25 @@ const AION = !args.includes("--no-aion"); // AION rights and naming available by
 const FAKE = !!opt("fake", false);
 const SEED = Number(opt("seed", 12)); // next test seed after the documented --seed 11 run
 const MAX_GBP = Math.min(1, Math.max(0, Number(opt("max-gbp", 1))));
-const MAX_CALLS = Math.min(50, Math.max(1, Number(opt("max-calls", 20))));
+const MAX_CALLS = Math.min(50, Math.max(1, Number(opt("max-calls", 50))));
 const MAX_OUTPUT_PER_CALL = 800;
 const MODEL_ALLOWLIST = new Set(["gemini-3.1-flash-lite","gemini-3-flash-preview"]);
-// These are deliberately HIGH safety assumptions, not claims of current API prices:
-// £8 per million input tokens and £32 per million output tokens.
-// Input reservation counts EVERY UTF-8 byte as a possible token, plus 4000 overhead.
-// Each HTTP attempt, including retries, consumes a full nonrefundable reservation.
-// This cannot impose a hard billing limit on Google's side; confirm billing separately.
-const UPPER_INPUT_GBP_PER_M = 8, UPPER_OUTPUT_GBP_PER_M = 32;
+// Conservative local *assumed* sterling rates, above official standard paid USD
+// text rates checked 13 Nov 2026; do not treat these as a live provider quote.
+// Gemini 3.1 Flash-Lite published: $0.25 input / $1.50 output per 1M.
+// Gemini 3 Flash Preview published: $0.50 input / $3.00 output per 1M.
+// Every UTF-8 input byte counts as at least one reserved "token" here, plus 4000
+// overhead. Reservations are charged BEFORE each attempt and are never refunded.
+// These checks cannot replace a Google-side hard billing limit.
+const COST_CEILINGS_GBP_PER_M = {
+  "gemini-3.1-flash-lite": {input:1, output:5},
+  "gemini-3-flash-preview": {input:2, output:8}
+};
 let reservedGBP = 0, attemptsMade = 0, billedPromptTokens = 0, billedOutputTokens = 0;
-function reserveCost(prompt) {
-  return ((Buffer.byteLength(prompt,"utf8") + 4000)*UPPER_INPUT_GBP_PER_M +
-    MAX_OUTPUT_PER_CALL*UPPER_OUTPUT_GBP_PER_M) / 1000000;
+function reserveCost(prompt, model) {
+  const rate=COST_CEILINGS_GBP_PER_M[model];
+  return ((Buffer.byteLength(prompt,"utf8") + 4000)*rate.input +
+    MAX_OUTPUT_PER_CALL*rate.output) / 1000000;
 }
 if (!Number.isFinite(MAX_GBP) || MAX_GBP <= 0 || !Number.isFinite(MAX_CALLS)) {console.error("Invalid --max-gbp / --max-calls");process.exit(2);}
 if (!FAKE && MODELS.some(m => !MODEL_ALLOWLIST.has(m))) {
@@ -495,7 +501,7 @@ async function askGemini(model, prompt) {
   if (/flash/.test(model)) gen.thinkingConfig = { thinkingBudget: 0 };
   const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
   for (let attempt = 0; attempt < 3; attempt++) {
-    const reserve = reserveCost(prompt);
+    const reserve = reserveCost(prompt, model);
     if(attemptsMade>=MAX_CALLS || reservedGBP+reserve>MAX_GBP+1e-9){
       const err=new Error("Pound budget guard reached; next API attempt refused.");
       err.budgetStop=true;throw err;
