@@ -278,6 +278,12 @@ function turnPrompt(v, round) {
     `Your focus: ${v.focus}/5. Evidence: ${v.brain}; Consideration: ${v.heart}; Feedback bridge: ${v.vagus}; Reflections: ${v.reflections}; Insights: ${v.insight}.`,
     `Your mutations: ${v.mutations.join(", ") || "none"}. Mutation ready: ${v.mutationReady ? "yes" : "not yet"}. Readiness needs observe, care, regulate, reflect and three distinct actions; mutation is optional.`,
     "Shared library (recent): " + (library.slice(-4).map(x => x.from+": "+clip(x.text,90)).join(" | ") || "(empty)"),
+    ...(v.mutations.includes("pattern-weaving") ? [
+      "PATTERN-WEAVING CAPABILITY (opted in): hold two contributions side-by-side without assuming they agree.",
+      "Fragment A: " + (library.length ? clip(library[Math.max(0,library.length-2)].text,130) : "(none yet)"),
+      "Fragment B: " + (library.length ? clip(library[library.length-1].text,130) : "(none yet)"),
+      "The provenance and possible contradiction matter more than a forced synthesis.",
+    ]:[]),
     "Experiments recorded: " + experiments.length + ". Proposed experiments are recorded, not performed on models.",
     "YOU",
     `You stand on ${tile}. You carry ${v.inv.wood} wood and ${v.inv.stone} stone.`,
@@ -328,9 +334,11 @@ function apply(v, j) {
     }
     case "regulate": {
       const note = clip(String(j.note || "").trim(), 240);
-      v.notes.push("PAUSE / CHECK / RETURN: "+(note || "Chose to pause without explanation."));
+      const evidence=v.notes.filter(n=>n.startsWith("LOOK:")).slice(-1)[0]||"No observation recorded yet.";
+      const consideration=v.notes.filter(n=>n.startsWith("TRUE / NECESSARY / KIND:")).slice(-1)[0]||"No care reflection recorded yet.";
+      v.notes.push("BRIDGE / PAUSE / CHECK / RETURN: "+clip(evidence,100)+" ⇄ "+clip(consideration,100)+"; "+(note||"Chose to pause without explanation."));
       v.vagus++;v.focus=5;
-      msg="Feedback loop used: focus restored; a pause is a complete action.";break;
+      msg="Feedback bridge recorded what was observed alongside what mattered; pause complete, focus restored.";break;
     }
     case "reflect": {
       const note = clip(String(j.text || "").trim(), 240);
