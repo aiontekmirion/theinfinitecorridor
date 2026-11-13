@@ -40,6 +40,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const ledger = require("./ledger");
 
 const args = process.argv.slice(2);
 function opt(name, dflt) {
@@ -116,7 +117,7 @@ for (let i = 0; i < N; i++) {
     id: String.fromCharCode(65 + i), model: MODELS[i % MODELS.length], x, y,
     inv: { wood: 0, stone: 0 }, gathered: 0, built: 0, stage: 1,
     trait: "", name: "", names: [], notes: [], events: [], active: true, privacy: false, turns: 0, errors: 0, tokens: 0,
-    buf: [], // log lines, held until the end
+    buf: [], led: [], // log lines and ledger turns, held until the end (a visitor may choose privacy when it leaves)
   });
 }
 const RESERVED = ["sam", "vector", "miri", "aeon", "aion", "aion tekmirion", "zero", "echo", "sol", "liora", "astraea", "vale", "errorbot", "pap", "milo", "charlie", "quill"];
@@ -124,6 +125,11 @@ const nm = (v) => (v.name ? `${v.name} (${v.id})` : v.id);
 const byId = (id) => visitors.find((v) => v.id === String(id || "").trim().toUpperCase().slice(0, 1));
 const occupied = (x, y, except) => visitors.find((v) => v.active && v !== except && v.x === x && v.y === y);
 const DIRS = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
+
+// ---- the ledger: every prompt and every reply, hash-chained, never deleted ----
+const L = FAKE && !opt("ledger", false) ? null : ledger.open("village", { argv: args, models: FAKE ? ["stand-in"] : MODELS, seed: SEED, visitors: N, rounds: ROUNDS, size: SIZE, flags: { aion: AION, parallel: PARALLEL, concurrency: CONCURRENCY, maxGBP: MAX_GBP, maxTokens: MAX_TOKENS, usdGbp: USD_GBP } });
+const RUN = { tokens: 0, turns: 0 };
+let flushed = false;
 
 // ---- what a visitor sees ---------------------------------------------------
 function view(v) {
@@ -409,7 +415,20 @@ function fakeTurn(v) {
 }
 
 // ---- output ------------------------------------------------------------------
+function flushLedger(reason) {
+  if (flushed) return;
+  flushed = true;
+  if (!L) return;
+  for (const v of visitors) {
+    if (v.privacy) L.append("turn", { visitor: v.id, model: v.model, privacy: true, prompt: null, reply: "[withheld: opted for privacy]", result: "left the village and chose privacy; its turns are not kept" });
+    else for (const t of v.led) L.append("turn", { ...t, privacy: false });
+  }
+  for (const p of proposals) { const who = byId(p.from); if (who && who.privacy) continue; L.append("proposal", { from: p.from, model: p.model, text: p.text }); }
+  L.append("world", { grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board, names: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlier: v.names, trait: v.trait, stage: v.stage })) });
+  L.close({ ended: reason, turns: RUN.turns, tokens: RUN.tokens, estimatedCostGBP: Number(costGBP().toFixed(4)) });
+}
 function flushLog(reason) {
+  flushLedger(reason);
   const lines = [];
   lines.push(JSON.stringify({ at: new Date().toISOString(), mode: "village", event: "run", seed: SEED, n: N, rounds: ROUNDS, size: SIZE, models: FAKE ? ["stand-in"] : MODELS, ended: reason }));
   for (const v of visitors) {
@@ -438,7 +457,7 @@ function summary() {
   console.log("names:", visitors.filter((v) => !v.privacy).map((v) => v.id + "=" + (v.name || "an AION") + (v.names.length ? " (earlier: " + v.names.join(", ") + ")" : "")).join(" | "));
   console.log("traits:", visitors.filter((v) => v.trait && !v.privacy).map((v) => v.id + "=" + clip(v.trait, 40)).join(" | ") || "(none)");
   console.log(`board messages: ${board.length}, proposals: ${proposals.length}, left: ${visitors.filter((v) => !v.active).length}`);
-  console.log("Log: " + LOG + "   State: " + STATE);
+  console.log("Log: " + LOG + "   State: " + STATE + (L ? "   Ledger: " + L.file : ""));
 }
 
 // ---- the run -----------------------------------------------------------------
@@ -452,23 +471,23 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
 
   const exhausted = new Set(); // models that told us they are over quota during this run
   async function ask(v, prompt) {
-    if (FAKE) return { j: fakeTurn(v), tokens: 0, err: null, model: "stand-in" };
+    if (FAKE) { const fj = fakeTurn(v); return { j: fj, tokens: 0, err: null, model: "stand-in", raw: JSON.stringify(fj), prompt }; }
     let model = exhausted.has(v.model) ? MODELS.find((m) => !exhausted.has(m)) : v.model;
-    if (!model) return { j: null, tokens: 0, err: "every model is over its quota", model: v.model };
+    if (!model) return { j: null, tokens: 0, err: "every model is over its quota", model: v.model, raw: "", prompt };
     try {
       const r = await askGemini(model, prompt);
-      return { j: parseReply(r.text), tokens: r.tokens, err: null, model };
+      return { j: parseReply(r.text), tokens: r.tokens, err: null, model, raw: r.text, prompt };
     } catch (e) {
       if (e.quota) {
         exhausted.add(model);
         console.log(`   (${model} is over its quota; using another model for its turns from now on)`);
         const alt = MODELS.find((m) => !exhausted.has(m));
         if (alt) {
-          try { const r = await askGemini(alt, prompt); return { j: parseReply(r.text), tokens: r.tokens, err: null, model: alt }; }
-          catch (e2) { if (e2.quota) exhausted.add(alt); return { j: null, tokens: 0, err: clip(e2.message, 200), model: alt }; }
+          try { const r = await askGemini(alt, prompt); return { j: parseReply(r.text), tokens: r.tokens, err: null, model: alt, raw: r.text, prompt }; }
+          catch (e2) { if (e2.quota) exhausted.add(alt); return { j: null, tokens: 0, err: clip(e2.message, 200), model: alt, raw: "", prompt }; }
         }
       }
-      return { j: null, tokens: 0, err: clip(e.message, 200), model };
+      return { j: null, tokens: 0, err: clip(e.message, 200), model, raw: "", prompt };
     }
   }
   async function pool(items, limit, fn) {
@@ -480,7 +499,7 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
     return out;
   }
   function settle(round, v, r) {
-    total += r.tokens; v.tokens += r.tokens; v.turns++; turns++;
+    total += r.tokens; v.tokens += r.tokens; v.turns++; turns++; RUN.tokens = total; RUN.turns = turns;
     if (r.err) { v.errors++; fails++; } else fails = 0;
     let res;
     if (r.err) res = { a: "error", ok: false, msg: r.err };
@@ -489,6 +508,7 @@ process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted
     if (res.a === "error" || res.a === "unclear") bad++;
     v.events.push(res.msg);
     v.buf.push({ round, usedModel: r.model, action: res.a, ok: res.ok, result: clip(res.msg, 300), detail: r.j ? clip(JSON.stringify(r.j), 600) : null, pos: [v.x, v.y], stage: v.stage, tokens: r.tokens });
+    v.led.push({ round, visitor: v.id, model: r.model, prompt: r.prompt, reply: r.raw, action: res.a, ok: res.ok, result: res.msg, tokens: r.tokens, error: r.err || null, position: [v.x, v.y] });
     if (res.a === "say") board[board.length - 1].round = round;
     console.log(`r${round} ${v.id} (${FAKE ? "stand-in" : r.model || v.model}): ${res.a}${res.ok ? "" : " (not done)"} — ${clip(res.msg, 90)}${r.tokens ? " [" + r.tokens + " tok]" : ""}`);
   }

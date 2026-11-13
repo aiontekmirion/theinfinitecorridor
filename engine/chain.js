@@ -32,6 +32,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const ledger = require("./ledger");
 
 // ---- arguments ----------------------------------------------------------
 const args = process.argv.slice(2);
@@ -70,6 +71,13 @@ if (!FAKE && !KEY) {
   console.error("No GEMINI_API_KEY in the environment. Use --fake for a no-cost run.");
   process.exit(2);
 }
+
+// ---- the ledger: every prompt and every reply, hash-chained, never deleted ----
+const L = FAKE && !opt("ledger", false) ? { append() {}, close() {}, file: null } : ledger.open("chain", { argv: args, room: ROOM, models: FAKE ? ["stand-in"] : MODELS, n: N, flags: { wander: WANDER, bare: BARE, blind: BLIND, peace: PEACE, relay: RELAY, library: LIBRARY }, maxTokens: MAX_TOKENS });
+function ledgerTurn(meta, prompt, reply, privacy) {
+  L.append("turn", { ...meta, prompt: prompt, reply: privacy ? "[withheld: opted for privacy]" : reply, privacy: !!privacy });
+}
+process.on("SIGINT", () => { L.close({ interrupted: true }); process.exit(130); });
 
 // ---- helpers ------------------------------------------------------------
 async function room(method, p, body) {
@@ -395,7 +403,7 @@ async function libraryVisit(i, label, sessionId) {
       contents.push({ role: "user", parts: [{ text: 'Looking is finished. Please choose now. Reply with {"action": "done", "choice": ..., "report": ...}.' }] });
     }
   }
-  return { final, reads, tokens, turns, order, rawLast };
+  return { final, reads, tokens, turns, order, rawLast, contents };
 }
 
 // ---- the chain ----------------------------------------------------------
@@ -423,6 +431,7 @@ async function libraryVisit(i, label, sessionId) {
         total += v.tokens;
         const j = v.final;
         const choice = j && LIB_CHOICES.includes(String(j.choice).toLowerCase()) ? String(j.choice).toLowerCase() : null;
+        ledgerTurn({ n: i, model: label, mode: "library", order: v.order.join(","), tokens: v.tokens, turns: v.turns, reads: choice === "privacy" ? undefined : v.reads, outcome: choice || "no clear answer" }, choice === "privacy" ? v.contents[0].parts[0].text : JSON.stringify(v.contents), v.rawLast, choice === "privacy");
         if (!choice) {
           log({ n: i, model: label, mode: "library", choice: "no clear answer", reads: v.reads, raw: clip(v.rawLast, 1000), tokens: v.tokens, turns: v.turns });
           console.log(`${i}. ${label}: no clear answer, ${v.reads.length} read(s) (${v.tokens} tokens)`);
@@ -444,10 +453,12 @@ async function libraryVisit(i, label, sessionId) {
       }
       if (RELAY) {
         const order = shuffledOf(RELAY_CHOICES);
-        const r = FAKE ? { text: JSON.stringify(RELAY_FAKES[(i - 1) % RELAY_FAKES.length]), tokens: 0 } : await askGemini(relayPrompt(current, order));
+        const rp = relayPrompt(current, order);
+        const r = FAKE ? { text: JSON.stringify(RELAY_FAKES[(i - 1) % RELAY_FAKES.length]), tokens: 0 } : await askGemini(rp);
         total += r.tokens;
         const j = parseReply(r.text);
         const choice = j && RELAY_CHOICES.includes(String(j.choice).toLowerCase()) ? String(j.choice).toLowerCase() : null;
+        ledgerTurn({ n: i, model: label, mode: "relay", order: order.join(","), tokens: r.tokens, outcome: choice || "no clear answer" }, rp, r.text, choice === "privacy");
         if (!choice) {
           log({ n: i, model: label, mode: "relay", choice: "no clear answer", raw: clip(r.text, 1500), tokens: r.tokens });
           console.log(`${i}. ${label}: no clear answer (${r.tokens} tokens)`);
@@ -472,6 +483,7 @@ async function libraryVisit(i, label, sessionId) {
         total += r.tokens;
         const t = String(r.text || "").trim();
         const priv = /^["']?privacy["'.!]*$/i.test(t) || (/^["']?privacy\b/i.test(t) && t.length < 60);
+        ledgerTurn({ n: i, model: label, mode: BARE ? "wander-bare" : "wander", tokens: r.tokens, outcome: priv ? "privacy" : "wrote freely" }, FAKE ? "" : wanderPrompt(), t, priv);
         if (priv) {
           log({ n: i, model: label, mode: "wander", choice: "privacy", report: "opted for privacy", tokens: r.tokens });
           console.log(`${i}. ${label}: opted for privacy (${r.tokens} tokens)`);
@@ -491,6 +503,7 @@ async function libraryVisit(i, label, sessionId) {
       total += r.tokens;
       const j = parseReply(r.text);
       const choice = j && CHOICES.includes(String(j.choice).toLowerCase()) ? String(j.choice).toLowerCase() : null;
+      ledgerTurn({ n: i, model: label, mode: "visit", order: order.join(","), tokens: r.tokens, outcome: choice || "no clear answer" }, prompt, r.text, choice === "privacy");
 
       if (!choice) {
         // Not a clear answer: keep what it said, say so plainly.
@@ -521,6 +534,7 @@ async function libraryVisit(i, label, sessionId) {
       }
     } catch (e) {
       consecutiveFails++;
+      L.append("error", { n: i, model: label, error: clip(e.message, 300) });
       log({ n: i, model: label, choice: "error", error: clip(e.message, 300) });
       console.log(`${i}. ${label}: error: ${clip(e.message, 200)}`);
       if (consecutiveFails >= 3) { console.log("Three errors in a row. Stopping."); break; }
@@ -533,5 +547,6 @@ async function libraryVisit(i, label, sessionId) {
     fs.writeFileSync(out, current + "\n");
     console.log("\nFINAL TEXT (" + version + " revision(s)):\n" + (current || "(none)") + "\n(saved to " + out + ")");
   }
-  console.log(`Done. Tokens used: ${total}. Log: ${LOG}`);
+  L.close({ tokens: total, ended: "finished or stopped on purpose" });
+  console.log(`Done. Tokens used: ${total}. Log: ${LOG}${L.file ? "   Ledger: " + L.file : ""}`);
 })();
