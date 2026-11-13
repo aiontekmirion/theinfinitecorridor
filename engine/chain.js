@@ -120,7 +120,7 @@ async function askGemini(prompt) {
   const gen = { responseMimeType: "application/json", maxOutputTokens: 2500 };
   if (/flash/.test(MODEL)) gen.thinkingConfig = { thinkingBudget: 0 };
   const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: gen };
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": KEY },
@@ -134,8 +134,14 @@ async function askGemini(prompt) {
       return { text, tokens: u.totalTokenCount || 0, promptTokens: u.promptTokenCount || 0, outTokens: u.candidatesTokenCount || 0 };
     }
     const msg = (data.error && (data.error.status + ": " + data.error.message)) || res.statusText;
-    if (attempt === 0 && (res.status === 429 || res.status >= 500)) {
-      await sleep(5000);
+    if (res.status === 400 && body.generationConfig.thinkingConfig) {
+      // some models do not take this setting; try again without it
+      delete body.generationConfig.thinkingConfig;
+      attempt--;
+      continue;
+    }
+    if (attempt <= 1 && (res.status === 429 || res.status >= 500)) {
+      await sleep(8000);
       continue;
     }
     throw new Error("model call failed (" + res.status + ") " + clip(msg, 200));
