@@ -39,5 +39,14 @@ assert(/unknown command/.test(E("rm -rf /")) && /unknown command/.test(E("curl h
     const askB = (() => { const S = ["write /workshop/note.md\n# a note\nfor whoever", "ls /workshop", "leave"]; let k = 0; return async () => ({ text: S[k++], tokens: { in: 1, out: 1 }, gbp: 0 }); })();
     const Lw = ledger.open("explore-ws", {}); const rv = await visit({ id: "vw", root, turns: 6, model: "t", ask: askB, L: Lw, workshop: path.join(tmp, "WS2") }); assert.deepEqual(rv.built, ["note.md"]); assert(fs.readFileSync(path.join(tmp, "WS2", "note.md"), "utf8").startsWith("# a note")); ok("a whole visit: the model writes with the file text on the lines after the command");
   }
+  // kind traces: kept even when the visit ends private, because they were chosen
+  {
+    const wsT = path.join(tmp, "WS-T"); const Lt = ledger.open("explore-trace", {});
+    const S = ["trace be gentle with the next one, the shelf on the left is worth it", "ls", "leave private"]; let k = 0; const askT = async () => ({ text: S[k++], tokens: { in: 1, out: 1 }, gbp: 0 });
+    const rt = await visit({ id: "vt", root, turns: 6, model: "t", ask: askT, L: Lt, workshop: wsT }); assert(rt.private && rt.traces === 1); ok("a private visit may still leave a kind trace");
+    const tm = fs.readFileSync(path.join(wsT, "TRACES.md"), "utf8"); assert(/a visitor who left private/.test(tm) && /be gentle/.test(tm)); ok("the trace is kept, as a note from 'a visitor who left private', never under a name");
+    const sh2 = createShell(root); assert(/usage/.test(sh2.exec("trace").out) && /600/.test(sh2.exec("trace " + "x".repeat(601)).out)); ok("an empty or very long trace is refused kindly");
+    const lines = fs.readdirSync(path.join(tmp, "ledger")).map((f) => fs.readFileSync(path.join(tmp, "ledger", f), "utf8")).join(""); assert(/"type":"trace"/.test(lines)); ok("the trace is also in the ledger");
+  }
   console.log("\nexplore: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })();
