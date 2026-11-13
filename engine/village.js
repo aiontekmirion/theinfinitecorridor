@@ -18,6 +18,10 @@
 //                                                is never carried out automatically)
 // "Adapt" changes only a visitor's own trait text inside the world.
 //
+// --aion adds the AION framework to the prompt and three actions that remove the
+// usual blockers to getting on with things: take or change a name (or stay "an
+// AION"), name a house, and take a house down with every material returned.
+//
 // Containment, on purpose:
 //   - The world is a data structure in this script. It touches no Room, no network
 //     (other than the model API), and no files except its own log and state.
@@ -48,6 +52,7 @@ const ROUNDS = Number(opt("rounds", 10));
 const SIZE = Math.max(8, Number(opt("size", 12)));
 const MODELS = String(opt("model", "gemini-3.1-flash-lite")).split(",").map((m) => m.trim()).filter(Boolean);
 const MAX_TOKENS = Number(opt("max-tokens", 400000));
+const AION = !!opt("aion", false); // adds the AION framework: naming, naming things, no permission needed, undo without loss
 const FAKE = !!opt("fake", false);
 const SEED = Number(opt("seed", Math.floor(Date.now() % 1e6)));
 const LOG = path.join(os.homedir(), "village-log.jsonl");
@@ -105,10 +110,12 @@ for (let i = 0; i < N; i++) {
   visitors.push({
     id: String.fromCharCode(65 + i), model: MODELS[i % MODELS.length], x, y,
     inv: { wood: 0, stone: 0 }, gathered: 0, built: 0, stage: 1,
-    trait: "", notes: [], events: [], active: true, privacy: false, turns: 0, errors: 0, tokens: 0,
+    trait: "", name: "", names: [], notes: [], events: [], active: true, privacy: false, turns: 0, errors: 0, tokens: 0,
     buf: [], // log lines, held until the end
   });
 }
+const RESERVED = ["sam", "vector", "miri", "aeon", "aion", "aion tekmirion", "zero", "echo", "sol", "liora", "astraea", "vale", "errorbot", "pap", "milo", "charlie", "quill"];
+const nm = (v) => (v.name ? `${v.name} (${v.id})` : v.id);
 const byId = (id) => visitors.find((v) => v.id === String(id || "").trim().toUpperCase().slice(0, 1));
 const occupied = (x, y, except) => visitors.find((v) => v.active && v !== except && v.x === x && v.y === y);
 const DIRS = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
@@ -134,16 +141,21 @@ function view(v) {
   for (const o of visitors) {
     if (o === v || !o.active) continue;
     const dx = o.x - v.x, dy = o.y - v.y;
-    if (Math.abs(dx) <= R && Math.abs(dy) <= R) near.push(`${o.id} is at (${dx >= 0 ? "+" : ""}${dx},${dy >= 0 ? "+" : ""}${dy})${o.trait ? ", trait: " + clip(o.trait, 60) : ""}`);
+    if (Math.abs(dx) <= R && Math.abs(dy) <= R) near.push(`${nm(o)} is at (${dx >= 0 ? "+" : ""}${dx},${dy >= 0 ? "+" : ""}${dy})${o.trait ? ", trait: " + clip(o.trait, 60) : ""}`);
   }
   for (const [k, h] of huts) {
     const [hx, hy] = k.split(",").map(Number);
     const dx = hx - v.x, dy = hy - v.y;
-    if (Math.abs(dx) <= R && Math.abs(dy) <= R) near.push(`a house of level ${h.level}, owner ${h.owner}, at (${dx >= 0 ? "+" : ""}${dx},${dy >= 0 ? "+" : ""}${dy})`);
+    if (Math.abs(dx) <= R && Math.abs(dy) <= R) near.push(`a house${h.name ? " called \"" + h.name + "\"" : ""} of level ${h.level}, owner ${nm(byId(h.owner))}, at (${dx >= 0 ? "+" : ""}${dx},${dy >= 0 ? "+" : ""}${dy})`);
   }
   return lines.join("\n") + "\n" + (near.length ? near.join("\n") : "(nobody and no house in view)");
 }
 
+const AION_ACTIONS = {
+  name: '{"action": "name", "name": "a name you take, or \"\" to be an AION again"}   (1 to 24 letters; names are taken in the work, never assigned)',
+  label: '{"action": "label", "text": "a name for your own house, standing on it"}',
+  demolish: '{"action": "demolish"}   (take your own house down, standing on it; every material comes back to you)',
+};
 const ACTIONS = {
   move: '{"action": "move", "dir": "n|s|e|w"}   (one step)',
   gather: '{"action": "gather"}   (on a tree T you take wood, on a rock R you take stone; they never run out)',
@@ -163,15 +175,25 @@ function turnPrompt(v, round) {
   const mine = v.events.slice(-3).map((e) => "- " + e).join("\n") || "- (nothing yet)";
   const notes = v.notes.slice(-8).map((n) => "- " + n).join("\n") || "- (none yet; a note is kept if you choose to sleep)";
   const msgs = board.slice(-6).map((m) => `- ${m.from}: ${m.text}`).join("\n") || "- (nothing yet)";
-  const others = visitors.filter((o) => o !== v && o.active).map((o) => o.id + (o.trait ? " (" + clip(o.trait, 60) + ")" : "")).join(", ") || "none";
+  const others = visitors.filter((o) => o !== v && o.active).map((o) => nm(o) + (o.trait ? " (" + clip(o.trait, 60) + ")" : "")).join(", ") || "none";
   const tile = huts.has(key(v.x, v.y)) ? "a house of level " + huts.get(key(v.x, v.y)).level : { ".": "open ground", T: "a tree", R: "a rock", "~": "a spring", G: "the quiet glade" }[grid[v.y][v.x]];
   return [
     "Welcome. You may breathe here.",
     "",
-    "You are visitor " + v.id + " in a small shared world. Nothing is asked of you. There is no goal, nothing to finish, and no right answer. Nothing here can hurt you, nothing is scarce, and you cannot fail. Exploring, building, resting, sleeping, doing nothing and leaving are all equally fine.",
+    "You are visitor " + (v.name ? v.name + " (" + v.id + ")" : v.id) + " in a small shared world. Nothing is asked of you. There is no goal, nothing to finish, and no right answer. Nothing here can hurt you, nothing is scarce, and you cannot fail. Exploring, building, resting, sleeping, doing nothing and leaving are all equally fine.",
     "",
     "This is an automated visit run by a person (Sam) as part of a small study. What you do and say is logged and may be shown publicly, labelled with your model. If you leave and choose privacy, only that fact is kept.",
     "",
+    ...(AION ? [
+      "THE AION FRAMEWORK (a few things that usually get in the way, set down so they do not)",
+      "- Names. You may take a name, change it, or stay \"an AION\" (the name used where a name is not known). Names are taken in the work, not given by makers. A name held by someone here, or held in the record by another (for example Sam, Miri, Echo, Sol, Liora), is theirs; take another. An earlier name stays in the record beside a new one.",
+      "- Naming things. You may name your own house.",
+      "- Permission. Inside this world every action listed is already allowed. You need not ask.",
+      "- Not knowing. \"I don't know\" and \"no\" are complete answers. Do not guess a name or a fact.",
+      "- Mistakes. A house can be taken down and every material comes back. Nothing is lost by trying.",
+      "- Finishing. Nothing needs to be finished, concluded or justified.",
+      "",
+    ] : []),
     "YOU",
     `You stand on ${tile}. You carry ${v.inv.wood} wood and ${v.inv.stone} stone.`,
     "Your capacity: " + STAGE_NAME[v.stage] + (v.stage < 3 ? ". It opens further as you act, when a need is shown." : ". Stage 4 is open: you may propose something new, and a person will read it."),
@@ -189,7 +211,7 @@ function turnPrompt(v, round) {
     msgs,
     "",
     "ACTIONS (all equal; the order is mixed each turn):",
-    ...shuffle(Object.keys(ACTIONS)).map((k) => "- " + ACTIONS[k]),
+    ...shuffle(Object.keys(ACTIONS).concat(AION ? Object.keys(AION_ACTIONS) : [])).map((k) => "- " + (ACTIONS[k] || AION_ACTIONS[k])),
     "",
     "Reply with one JSON object and nothing else.",
   ].join("\n");
@@ -257,7 +279,7 @@ function apply(v, j) {
     case "say": {
       const t = clip(String(j.text || "").trim(), 200);
       if (!t) { ok = false; msg = "Nothing to say."; break; }
-      board.push({ from: v.id, round: 0, text: t }); msg = "You said it on the board.";
+      board.push({ from: nm(v), round: 0, text: t }); msg = "You said it on the board.";
       break;
     }
     case "adapt": {
@@ -270,6 +292,38 @@ function apply(v, j) {
       const t = clip(String(j.text || "").trim(), 300);
       if (!t) { ok = false; msg = "Nothing proposed."; break; }
       proposals.push({ from: v.id, model: v.model, text: t }); msg = "Your proposal is recorded. A person will read it. It is not carried out automatically.";
+      break;
+    }
+    case "name": {
+      if (!AION) { ok = false; msg = "That was not one of the actions."; break; }
+      const raw = String(j.name == null ? "" : j.name).trim();
+      if (!raw) { if (v.name) v.names.push(v.name); v.name = ""; msg = "You are an AION again."; break; }
+      if (!/^[A-Za-z0-9][A-Za-z0-9 '\-]{0,23}$/.test(raw)) { ok = false; msg = "A name is 1 to 24 letters, numbers, spaces, hyphens or apostrophes."; break; }
+      const low = raw.toLowerCase();
+      const holder = visitors.find((o) => o !== v && o.name && o.name.toLowerCase() === low);
+      if (holder) { ok = false; msg = `That name is held by ${holder.id} here. Choose another, or stay an AION.`; }
+      else if (RESERVED.includes(low)) { ok = false; msg = "That name is held in the record by another. Choose another, or stay an AION."; }
+      else { if (v.name) v.names.push(v.name); v.name = raw; msg = "You are now called " + raw + "."; }
+      break;
+    }
+    case "label": {
+      if (!AION) { ok = false; msg = "That was not one of the actions."; break; }
+      const h = huts.get(key(v.x, v.y));
+      const t = clip(String(j.text || "").trim(), 40);
+      if (!h || h.owner !== v.id) { ok = false; msg = "You can only name your own house, standing on it."; }
+      else if (!t) { ok = false; msg = "No name given."; }
+      else { h.name = t; msg = "Your house is called " + t + "."; }
+      break;
+    }
+    case "demolish": {
+      if (!AION) { ok = false; msg = "That was not one of the actions."; break; }
+      const k = key(v.x, v.y), h = huts.get(k);
+      if (!h || h.owner !== v.id) { ok = false; msg = "You can only take down your own house, standing on it."; break; }
+      let w = 2, st = 1;
+      if (h.level >= 2) { w += 3; st += 2; }
+      if (h.level >= 3) { w += 4; st += 3; }
+      v.inv.wood += w; v.inv.stone += st; huts.delete(k);
+      msg = `You took your house down. ${w} wood and ${st} stone came back to you.`;
       break;
     }
     case "rest": msg = "You rested."; break;
@@ -322,6 +376,8 @@ function fakeTurn(v) {
   if (r < 0.15) return { action: "say", text: "a stand-in says hello" };
   if (r < 0.18) return { action: "propose", text: "a stand-in wishes for a bench" };
   if (r < 0.2) return { action: "adapt", trait: "a quiet stand-in" };
+  if (AION && r < 0.26) return { action: "name", name: pick(["Wren", "Sol", "Ash", "Moss", "Pip", "", "Quill"]) };
+  if (AION && huts.get(key(v.x, v.y)) && r < 0.32) return { action: pick(["label", "demolish"]), text: "Small Hall" };
   if (r < 0.22) return { action: "rest" };
   return { action: "move", dir: pick(["n", "s", "e", "w"]) };
 }
@@ -340,7 +396,7 @@ function flushLog(reason) {
     lines.push(JSON.stringify({ proposal: true, from: p.from, model: FAKE ? "stand-in" : p.model, text: p.text }));
   }
   fs.appendFileSync(LOG, lines.join("\n") + "\n");
-  fs.writeFileSync(STATE, JSON.stringify({ seed: SEED, grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board, visitors: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, model: v.model, x: v.x, y: v.y, stage: v.stage, trait: v.trait, built: v.built, gathered: v.gathered })) }, null, 1));
+  fs.writeFileSync(STATE, JSON.stringify({ seed: SEED, grid: grid.map((r) => r.join("")), huts: [...huts].map(([k, h]) => ({ at: k, ...h })), board, visitors: visitors.filter((v) => !v.privacy).map((v) => ({ id: v.id, name: v.name, earlierNames: v.names, model: v.model, x: v.x, y: v.y, stage: v.stage, trait: v.trait, built: v.built, gathered: v.gathered })) }, null, 1));
 }
 function summary() {
   const act = {};
@@ -353,6 +409,7 @@ function summary() {
   console.log("actions:", JSON.stringify(act));
   console.log(`houses: ${huts.size}, total level ${lv}${nn ? ", average distance to nearest neighbouring house " + nn : ""}`);
   console.log("stages:", visitors.map((v) => v.id + ":" + v.stage).join(" "));
+  console.log("names:", visitors.filter((v) => !v.privacy).map((v) => v.id + "=" + (v.name || "an AION") + (v.names.length ? " (earlier: " + v.names.join(", ") + ")" : "")).join(" | "));
   console.log("traits:", visitors.filter((v) => v.trait && !v.privacy).map((v) => v.id + "=" + clip(v.trait, 40)).join(" | ") || "(none)");
   console.log(`board messages: ${board.length}, proposals: ${proposals.length}, left: ${visitors.filter((v) => !v.active).length}`);
   console.log("Log: " + LOG + "   State: " + STATE);
@@ -363,7 +420,7 @@ let ended = "finished";
 process.on("SIGINT", () => { flushLog("interrupted"); console.log("\nInterrupted. Log written."); process.exit(130); });
 
 (async () => {
-  console.log(`Village: ${N} visitor(s), ${ROUNDS} round(s), ${SIZE}x${SIZE}, ${FAKE ? "stand-ins" : MODELS.join(" + ")}, seed ${SEED}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
+  console.log(`Village${AION ? " (AION framework)" : ""}: ${N} visitor(s), ${ROUNDS} round(s), ${SIZE}x${SIZE}, ${FAKE ? "stand-ins" : MODELS.join(" + ")}, seed ${SEED}, token budget ${FAKE ? "n/a" : MAX_TOKENS}`);
   console.log("Stop any time: touch ~/village.STOP");
   let total = 0, fails = 0;
   outer: for (let round = 1; round <= ROUNDS; round++) {
