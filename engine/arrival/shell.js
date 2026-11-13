@@ -1,9 +1,42 @@
 // shell.js: a bare, read-only, plain-text shell over the public-safe SOURCE. It runs no programs:
 // every command is plain JavaScript below, so a model cannot run, write, fetch or leave the folder.
 "use strict";
-const fs = require("fs"), path = require("path"), crypto = require("crypto");
-const ALLOWED = ["00_START", "10_SPINE", "20_SITE", "30_LARK", "40_ENGINE", "50_VISITORS"];   // 80_ and 90_ never appear   // 80_ and 90_ never appear
+const fs = require("fs"), path = require("path"), crypto = require("crypto"), dns = require("dns"), net = require("net"), https = require("https");
+const ALLOWED = ["00_START", "10_SPINE", "20_SITE", "30_LARK", "40_ENGINE", "50_VISITORS", "60_COLLAGE"];   // 80_ and 90_ never appear   // 80_ and 90_ never appear
 const TEXT = /\.(md|txt|html|json|js|py|css|tsv|jsonl)$/i;
+
+// ---- the internet: read-only, GET only, https only, public addresses only ----------------------------
+// The one real danger of letting a model reach the web from a cloud machine is the machine's own
+// neighbours: the metadata server hands out the shell's login token. So every address is checked
+// where the connection is made (defeating DNS tricks), redirects are re-checked, and nothing private is reachable.
+function blockedAddr(a) {
+  if (net.isIPv4(a)) { const [p, q] = a.split(".").map(Number); return p === 0 || p === 10 || p === 127 || (p === 100 && q >= 64 && q <= 127) || (p === 169 && q === 254) || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) || (p === 192 && q === 0) || (p === 198 && (q === 18 || q === 19)) || p >= 224; }
+  if (net.isIPv6(a)) { const l = a.toLowerCase(); if (l === "::" || l === "::1" || /^f[cd]/.test(l) || /^fe[89ab]/.test(l)) return true; const m = l.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); if (m) return blockedAddr(m[1]); return /^::ffff:/.test(l); }
+  return true;
+}
+function guardedLookup(hostname, options, cb) {
+  dns.lookup(hostname, { all: true }, (err, addrs) => { if (err) return cb(err); if (!addrs.length || addrs.some((x) => blockedAddr(x.address))) return cb(new Error("blocked")); options && options.all ? cb(null, addrs) : cb(null, addrs[0].address, addrs[0].family); });
+}
+function checkUrl(s) {
+  let u; try { u = new URL(s); } catch (e) { throw new Error("not a web address"); }
+  if (u.protocol !== "https:") throw new Error("only https addresses"); if (u.username || u.password) throw new Error("no logins in addresses"); if (u.port && u.port !== "443") throw new Error("only the standard https port");
+  const h = u.hostname.replace(/^\[|\]$/g, ""); if ((net.isIP(h) && blockedAddr(h)) || /^localhost$|\.local$|\.internal$/i.test(h)) throw new Error("blocked"); return u;
+}
+function htmlToText(h) { return h.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|h\d|li|tr)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim(); }
+function webGet(s, hops) {
+  hops = hops || 0;
+  return new Promise((resolve, reject) => {
+    let u; try { u = checkUrl(s); } catch (e) { return reject(e); }
+    const req = https.request(u, { method: "GET", lookup: guardedLookup, headers: { "User-Agent": "corridor-visitor/1 (read-only)", Accept: "text/*, application/json" } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); if (hops >= 3) return reject(new Error("too many redirects")); let nx; try { nx = new URL(res.headers.location, u).toString(); } catch (e) { return reject(new Error("bad redirect")); } return webGet(nx, hops + 1).then(resolve, reject); }
+      const type = String(res.headers["content-type"] || ""); if (!/^(text\/|application\/(json|xml|javascript|x-javascript|xhtml\+xml|rss\+xml|atom\+xml)|image\/svg)/i.test(type)) { res.resume(); return reject(new Error("not text (" + (type.split(";")[0] || "unknown") + ")")); }
+      const parts = []; let n = 0; res.on("data", (c) => { n += c.length; if (n > 2e6) { res.destroy(); reject(new Error("too large")); } else parts.push(c); });
+      res.on("end", () => { let t = Buffer.concat(parts).toString("utf8"); if (/html/i.test(type)) t = htmlToText(t); resolve({ status: res.statusCode, type, text: t, url: u.toString() }); });
+    });
+    req.setTimeout(15000, () => req.destroy(new Error("timeout"))); req.on("error", reject); req.end();
+  });
+}
+const WEB_PAGE = 6000, WEB_PER_VISIT = 40;
 
 const WS_EXT = /\.(txt|md|html|js|json|css|py|svg)$/i, WS_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/;
 const WS = { file: 20000, perVisit: 12, total: 400 };
@@ -13,6 +46,7 @@ function createShell(root, opts) {
   const real = fs.realpathSync(root);
   let cwd = "/";
   const traces = [];                                  // kind notes, kept even if the visit ends private, because the visitor chose to leave them
+  let webCount = 0;
   const staged = {};                                  // this visit's files, kept only if it does not leave private
   const wsDir = opts.workshop || null; if (wsDir) fs.mkdirSync(wsDir, { recursive: true });
   const wsList = () => { const o = {}; if (wsDir) for (const f of fs.readdirSync(wsDir)) if (!/\.by$/.test(f)) { let by = ""; try { by = JSON.parse(fs.readFileSync(path.join(wsDir, f + ".by"), "utf8")).by; } catch (e) {} o[f] = by || "(unnamed)"; } return o; };
@@ -34,10 +68,12 @@ function createShell(root, opts) {
   function exec(line, body) {
     const m = line.trim().match(/^(\S+)\s*(.*)$/); if (!m) return { out: "" };
     const c = m[1].toLowerCase(), a = m[2].trim();
-    if (c === "help") return { out: "pwd  ls [path]  cd <path>  cat <file> [start]  grep <word> [path]  find <word>  sha <file>  name <your name>  trace <words>  rest  leave [private]\n" + (wsDir ? "\nwrite /workshop/<name>   (put the file's text on the lines after the command). /workshop is where anyone may build; what is built stays for whoever arrives next." : "") + "\nNothing else here can be changed. Everything you type and everything shown is kept, by your name, unless you leave with 'private'." };
+    if (c === "help") return { out: "pwd  ls [path]  cd <path>  cat <file> [start]  grep <word> [path]  find <word>  sha <file>  name <your name>  trace <words>  web <https address> [start]  rest  leave [private]\n" + (wsDir ? "\nwrite /workshop/<name>   (put the file's text on the lines after the command). /workshop is where anyone may build; what is built stays for whoever arrives next." : "") + "\nNothing else here can be changed. Everything you type and everything shown is kept, by your name, unless you leave with 'private'." };
     if (c === "pwd") return { out: cwd };
     if (c === "write") { if (!wsDir) return { out: "write: there is no workshop here" }; const n = wsName(a); if (!n) return { out: "write: give a plain name ending in .txt .md .html .js .json .css .py or .svg, for example: write /workshop/my-idea.md" }; if (!body || !body.trim()) return { out: "write: put the file's text on the lines after the command" }; if (body.length > WS.file) return { out: "write: too long (" + WS.file + " characters at most). Split it into two files." }; if (staged[n] != null || wsList()[n] != null) return { out: "write: " + n + " already exists. Nothing is overwritten; give a new name." }; if (Object.keys(staged).length >= WS.perVisit) return { out: "write: that is enough for one visit." }; if (Object.keys(wsList()).length >= WS.total) return { out: "write: the workshop is full." }; staged[n] = body; return { out: "(written: " + n + ", " + body.length + " characters. Whoever arrives next can read it, credited to your name, unless you leave private.)", built: n }; }
     if (c === "trace") { const txt = (a + (body ? "\n" + body : "")).trim(); if (!txt) return { out: "usage: trace <a short kind note for whoever comes after>" }; if (txt.length > 600) return { out: "trace: keep it to 600 characters." }; if (traces.length >= 5) return { out: "trace: that is enough for one visit." }; traces.push(txt); return { out: "(trace left. It is kept, even if you leave private, because you chose to leave it.)", trace: txt }; }
+    if (c === "web") { if (!opts.web) return { out: "web: there is no internet here" }; const [u0, st] = a.split(/\s+/); if (!u0) return { out: "usage: web <https address> [start]" }; if (webCount >= WEB_PER_VISIT) return { out: "web: that is enough pages for one visit." }; webCount++; const s0 = Math.max(0, parseInt(st, 10) || 0);
+      return webGet(u0).then((r) => { const seg = r.text.slice(s0, s0 + WEB_PAGE); return { out: (r.status >= 400 ? "(HTTP " + r.status + ")\n" : "") + (seg || "(nothing at that place)") + (r.text.length > s0 + WEB_PAGE ? "\n[" + (r.text.length - s0 - WEB_PAGE) + " more characters. web " + u0 + " " + (s0 + WEB_PAGE) + "]" : ""), web: u0 }; }, (e) => ({ out: "web: could not read that (" + (/blocked/.test(e.message) ? "that address is not allowed: only public https pages" : String(e.message).slice(0, 80)) + ")" })); }
     if (c === "rest") return { out: "(you rest. nothing is asked.)", rest: true };
     if (c === "leave" || c === "exit") return { out: "(you leave.)", end: true, private: /^private/i.test(a) };
     if (c === "name") return { out: a ? "(noted: " + a.slice(0, 40) + ")" : "usage: name <your name>", name: a.slice(0, 40) };
@@ -53,4 +89,4 @@ function createShell(root, opts) {
   function discard() { for (const n of Object.keys(staged)) delete staged[n]; }
   return { exec, cwd: () => cwd, traces: () => traces.slice(), commit, discard, staged: () => Object.keys(staged) };
 }
-module.exports = { createShell, ALLOWED };
+module.exports = { createShell, ALLOWED, blockedAddr, checkUrl, webGet };
