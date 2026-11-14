@@ -43,5 +43,14 @@ const out = path.join(tmp, "out"); fs.writeFileSync(path.join(dir, "x.md"), "# x
 { const dd = fs.mkdtempSync(path.join(os.tmpdir(), "shelf-")); const MM = createMilo({ dir: dd }); const A1 = MM.visitor("a1", () => "Ada"), B1 = MM.visitor("b1", () => "Bo"); A1.handle("go", "door"); for (let i = 0; i < 9 && !/biscuit tin/.test(A1.handle("pockets")); i++) A1.handle("open", "box"); A1.handle("go", "room");
   assert(/leave a biscuit tin/.test(A1.handle("put", "the tin because Cromwell would want it kept")), "put tin"); B1.handle("go", "room"); assert(/biscuit tin \(Ada: /.test(B1.handle("shelf")), "Bo finds Ada's tin"); assert(/take a biscuit|never empty/i.test(B1.handle("look")));
   assert(/You take a biscuit tin/.test(B1.handle("take", "the biscuit tin")), "takes the tin, not a biscuit"); assert(/biscuits for everyone/.test(B1.handle("take", "a biscuit"))); assert(/A very good biscuit/.test(B1.handle("eat", "biscuit"))); assert(/biscuits for everyone/.test(B1.handle("take", "biscuit"))); ok("the shelf holds what visitors put on it, whoever comes next can take it, and the biscuit tin never empties: biscuits for everyone"); }
+  { // the things the unanswered letters said failed (letters 60 to 63, and 89), tried the way they were typed
+    const dL = fs.mkdtempSync(path.join(os.tmpdir(), "milo-letters-")), ML = createMilo({ dir: dL }), A = ML.visitor("a", () => "a"), B = ML.visitor("b", () => "b");
+    A.handle("go", "door"); assert(/a tiny bell/.test(A.handle("open", "box")));
+    for (const w of ["tiny bell", "bell", "the tiny bell", "a tiny bell"]) { const r = A.handle("examine", w); assert(/look at it/.test(r) && /rings once/.test(r) && /still in your pockets/.test(r), "examine " + w + ": " + r); }
+    assert(/In your pockets: a tiny bell/.test(A.handle("pockets", "")), "looking does not use it up"); assert(/There is no .* here/.test(A.handle("examine", "sword")), "a thing you do not have is still not here");
+    A.handle("go", "room"); assert(/You leave a tiny bell/.test(A.handle("put", "bell so it says hello")));
+    assert(/You take a tiny bell/.test(B.handle("take", "bell")), "take by the short name"); assert(/You leave a tiny bell/.test(B.handle("put", "the bell")));
+    assert(/You take a tiny bell/.test(B.handle("take", "the tiny bell from the shelf")), "take with small words around it"); assert(/not on the shelf/.test(B.handle("take", "lantern")));
+    ok("a carried thing can be looked at, and a thing on the shelf can be taken by its short name"); }
 console.log("\nmilo: " + n + " checks passed (offline, no model, no cost)"); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
