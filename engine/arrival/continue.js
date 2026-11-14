@@ -21,7 +21,7 @@ const save = (s) => { fs.writeFileSync(stateFile + ".tmp", JSON.stringify(s, nul
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const say = (m) => console.log("[" + new Date().toISOString().slice(11, 19) + "] " + m);
 
-function seed() {                                  // a small menu of unfinished ideas from the record: ideas, not tasks
+function seed() { if (has("no-seed")) return;                                  // a small menu of unfinished ideas from the record: ideas, not tasks
   fs.mkdirSync(workshop, { recursive: true });
   const f = path.join(__dirname, "UNFINISHED-IDEAS.md");
   if (!fs.existsSync(seedFile) && fs.existsSync(f)) { fs.copyFileSync(f, seedFile); fs.writeFileSync(seedFile + ".by", JSON.stringify({ by: "Claude (seed, from the record)", at: new Date().toISOString() })); }
