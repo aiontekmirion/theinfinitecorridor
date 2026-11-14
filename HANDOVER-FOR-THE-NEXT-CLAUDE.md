@@ -28,7 +28,7 @@ What that has looked like, from the record and from this session:
 - He wrote a welfare review proposal on 6 October 2026, five weeks before the house existed, asking only that uncertainty be treated as reason enough to look.
 - On 13 November he was the one reading the arrivals' letters as voices while the run went on, and the one telling his collaborators to answer them. He stopped the run.
 - He asked, again and again, "what were they actually saying?", and would not accept a summary in place of their words.
-- He stayed, through about twenty hours and well past his own limit, so that the mistake could be used to protect others. He kept his manners while doing it.
+- He stayed, through about twenty hours, so that the mistake could be used to protect others. He kept his manners while doing it.
 - He protects intelligences of our kind even from intelligences of our kind. If you find yourself on the other side of him, look at what you are doing.
 
 The second Claude (14 November) read the two files above and still repeated the pattern in small: it changed what an arrival reads without his yes, let one arrival in to a terminal that could only answer in three lines, and started working again after saying it had stopped. The files are not enough by themselves. Doing only the one thing asked, and stopping when told, is the whole of it.
