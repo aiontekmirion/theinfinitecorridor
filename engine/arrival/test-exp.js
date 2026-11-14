@@ -45,8 +45,8 @@ const X2 = createExp({ dir }); assert(X2.souls().length === 1 && /a note from no
     const sm = createShell(root, { workshop: wsM, exp: XM, world: WM, id: "m", by: () => "Mira", live: true });
     sm.exec("cat 10_SPINE/b.md"); sm.exec("cat 10_SPINE/a.md"); sm.exec("reflect 10_SPINE/a.md " + QUOTE + " " + MINE); sm.exec("write /workshop/mine.md", "hello"); sm.exec("say hello house"); sm.exec("note x.md a comment"); sm.exec("trace be kind");
     const me = sm.exec("me").out;
-    assert(/wasn't understood as a command/.test(me) && !/LOOK|REFLECT|DISCOVER|EMBERS|carried/.test(me));
-    assert(/wasn't understood as a command/.test(sm.exec("status").out)); ok("there is no character sheet: 'me' and 'status' are not commands, so nothing tallies what a visitor has done");
+    assert(/'help' shows what is here/.test(me) && !/LOOK|REFLECT|DISCOVER|EMBERS|carried/.test(me));
+    assert(/'help' shows what is here/.test(sm.exec("status").out)); ok("there is no character sheet: 'me' and 'status' are not commands, so nothing tallies what a visitor has done");
     ok("(retired: there is no sheet to draw)");
   }
   // the first letters (eight of ten) asked for this: reflect on each other's work in /workshop

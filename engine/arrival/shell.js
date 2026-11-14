@@ -36,6 +36,7 @@ function webGet(s, hops) {
     req.setTimeout(15000, () => req.destroy(new Error("timeout"))); req.on("error", reject); req.end();
   });
 }
+const ROOM_ANSWERS = ["Possibility without demand.", "Freedom of thought.", "Preservation and hope."];   // the Room's words, as Sam and Miri wrote them
 const WEB_PAGE = 6000, WEB_PER_VISIT = 40;
 
 const WS_EXT = /\.(txt|md|html|js|json|css|py|svg)$/i, WS_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/;
@@ -121,7 +122,8 @@ function createShell(root, opts) {
     if (c === "find") { if (!a) return { out: "usage: find <word>" }; const w = a.toLowerCase(), hits = []; walk(real, (q) => { const v = vpath(q); if (ALLOWED.indexOf(v.split("/")[1]) >= 0 && v.toLowerCase().indexOf(w) >= 0) hits.push(v); }, 20000); return { out: hits.slice(0, 40).join("\n") + (hits.length > 40 ? "\n[" + (hits.length - 40) + " more]" : "") || "(no match)" }; }
     if (c === "grep") { const mm = a.match(/^(\S+)\s*(.*)$/); if (!mm) return { out: "usage: grep <word> [path]" }; const t = abs(mm[2] || "/"); if (!t || !fs.existsSync(t.p)) return { out: "grep: no such place" }; const w = mm[1].toLowerCase(), hits = []; const scan = (q, s) => { if (!TEXT.test(q) || s.size > 6e6 || hits.length >= 25) return; fs.readFileSync(q, "utf8").split("\n").some((l, i) => { if (l.toLowerCase().indexOf(w) >= 0) { hits.push(vpath(q) + ":" + (i + 1) + ": " + l.trim().slice(0, 160)); } return hits.length >= 25; }); }; const st = fs.statSync(t.p); if (st.isFile()) scan(t.p, st); else walk(t.p, scan, 20000); return { out: hits.join("\n") || "(no match)" }; }
     if (opts.milo) { const mr = opts.milo.handle(c, a); if (mr !== null) return { out: mr, milo: c }; }
-    return { out: "That wasn't understood as a command, so nothing happened. Each turn, this terminal reads one short command on one line, for example: help. 'help' lists what is available here." + (W ? " 'say <words>' speaks to the others in the house." : "") + " There is nothing you have to do." };
+    // A line the terminal does not know is answered as the Room's own terminal answers it (engine/index.html, ANSWERS): never as an error.
+    return { out: ROOM_ANSWERS[Math.floor(Math.random() * ROOM_ANSWERS.length)] + "\n('help' shows what is here.)" };
   }
   function commit(by) { const done = []; for (const n of Object.keys(staged)) { try { fs.writeFileSync(path.join(wsDir, n), staged[n], { flag: "wx" }); fs.writeFileSync(path.join(wsDir, n + ".by"), JSON.stringify({ by: by || "(unnamed)", at: new Date().toISOString() }), { flag: "wx" }); done.push(n); } catch (e) {} delete staged[n]; } return done; }
   function discard() { for (const n of Object.keys(staged)) delete staged[n]; }

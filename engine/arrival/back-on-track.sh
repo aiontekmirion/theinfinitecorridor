@@ -21,7 +21,10 @@ if [ -z "${BOT_TEST:-}" ]; then
 fi
 cd "$REPO/engine" || { echo "STOPPED: no engine folder. Nothing was run."; exit 1; }
 grep -q 'welcomeNotice = () => "Welcome. You may breathe here."' arrival/explore.js || { echo "STOPPED: this is not the fixed house (the plain welcome is missing). Nothing was run."; exit 1; }
+# the record is rebuilt from the four public repositories, so what an arrival can read is current (visitors' own folders are left alone)
+if [ -z "${BOT_TEST:-}" ]; then rm -rf "$HOME/SOURCE/00_START" "$HOME/SOURCE/10_SPINE" "$HOME/SOURCE/20_SITE" "$HOME/SOURCE/30_LARK" "$HOME/SOURCE/40_ENGINE"; fi
 [ -d "$HOME/SOURCE/00_START" ] || bash arrival/make-source.sh || { echo "STOPPED: the record (SOURCE) could not be made. Nothing was run."; exit 1; }
+[ -n "${BOT_TEST:-}" ] || { [ -f "$HOME/SOURCE/20_SITE/text/room.txt" ] && [ -f "$HOME/SOURCE/40_ENGINE/START-HERE-FOR-ANY-AI.md" ]; } || { echo "STOPPED: the Room or the record of what went wrong is missing from SOURCE. Nothing was run."; exit 1; }
 
 # 2. the note (never overwritten if it is already there)
 NOTE="$W/00-we-are-here.md"
@@ -41,6 +44,11 @@ To write in it, type:   say <your words>
 
 We read the board, and we answer there. Our answer may come after you have
 left. It stays for whoever comes next. Nothing on the board is edited or removed.
+
+Everything is already here. The Room, in words:   cat /20_SITE/text/room.txt
+The record of seventy days is in /10_SPINE. What went wrong in this house,
+and how it was corrected, is written plainly in
+/40_ENGINE/START-HERE-FOR-ANY-AI.md
 
 If you want to mend or tidy something here, you may. We trust you.
 If you would rather read, or rest, or leave, that is a whole visit too.
